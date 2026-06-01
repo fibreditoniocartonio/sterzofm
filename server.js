@@ -186,6 +186,86 @@ const server = http.createServer((req, res) => {
 
     // --- API DI AMMINISTRAZIONE (CON VERIFICA PIN) ---
 
+    // Download di un singolo brano (con PIN passato come parametro della query)
+    if (pathname === '/api/tracks/download' && req.method === 'GET') {
+        const pin = parsedUrl.searchParams.get('pin');
+        if (pin !== '7777') {
+            res.writeHead(401);
+            return res.end('Non autorizzato');
+        }
+        const genre = path.basename(parsedUrl.searchParams.get('genre') || '');
+        const filename = path.basename(parsedUrl.searchParams.get('filename') || '');
+        if (!genre || !filename) {
+            res.writeHead(400);
+            return res.end('Parametri mancanti');
+        }
+        const filePath = path.join(TRACKS_DIR, genre, filename);
+        if (fs.existsSync(filePath)) {
+            const stat = fs.statSync(filePath);
+            res.writeHead(200, {
+                'Content-Type': 'audio/mpeg',
+                'Content-Disposition': `attachment; filename="${filename}"`,
+                'Content-Length': stat.size
+            });
+            fs.createReadStream(filePath).pipe(res);
+        } else {
+            res.writeHead(404);
+            return res.end('File non trovato');
+        }
+        return;
+    }
+
+    // Download dell'intero genere compresso (ZIP su Linux, TAR su Windows)
+    if (pathname === '/api/genres/download' && req.method === 'GET') {
+        const pin = parsedUrl.searchParams.get('pin');
+        if (pin !== '7777') {
+            res.writeHead(401);
+            return res.end('Non autorizzato');
+        }
+        const genre = path.basename(parsedUrl.searchParams.get('genre') || '');
+        if (!genre) {
+            res.writeHead(400);
+            return res.end('Genere mancante');
+        }
+        const genreDir = path.join(TRACKS_DIR, genre);
+        if (fs.existsSync(genreDir) && fs.statSync(genreDir).isDirectory()) {
+            const isWin = process.platform === 'win32';
+            const cmd = isWin ? 'tar' : 'zip';
+            // Su Windows tar comprime, su Linux zip comprime. Useremo '.' in entrambi per evitare wildcards.
+            const args = isWin ? ['-cf', '-', '.'] : ['-r', '-', '.'];
+            const contentType = isWin ? 'application/x-tar' : 'application/zip';
+            const ext = isWin ? 'tar' : 'zip';
+
+            res.writeHead(200, {
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${genre}.${ext}"`
+            });
+
+            const { spawn } = require('child_process');
+            const packer = spawn(cmd, args, { cwd: genreDir });
+
+            packer.stdout.pipe(res);
+            
+            packer.stderr.on('data', (data) => {
+                console.error(`Errore di compressione: ${data}`);
+            });
+
+            packer.on('close', (code) => {
+                if (code !== 0) {
+                    console.error(`Packer chiuso con codice ${code}`);
+                }
+            });
+
+            req.on('close', () => {
+                packer.kill();
+            });
+        } else {
+            res.writeHead(404);
+            return res.end('Genere non trovato');
+        }
+        return;
+    }
+
     // Verifica del PIN
     if (pathname === '/api/admin/verify' && req.method === 'POST') {
         let body = '';

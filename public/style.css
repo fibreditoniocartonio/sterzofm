@@ -173,3 +173,56 @@ canvas { width: 100%; height: 150px; background: #141419; margin-top: 20px; bord
     background: rgba(255, 0, 0, 0.1);
     border-radius: 3px;
 }
+
+/* Generi Collassabili */
+.admin-genre-box.collapsed .admin-genre-body {
+    display: none !important;
+}
+.admin-genre-header {
+    cursor: pointer;
+    user-select: none;
+}
+.admin-genre-title::before {
+    content: '▼ ';
+    display: inline-block;
+    margin-right: 5px;
+    font-size: 0.8rem;
+    transition: transform 0.2s;
+    color: #ff007f;
+}
+.admin-genre-box.collapsed .admin-genre-title::before {
+    content: '▶ ';
+}
+
+/* Pulsanti Download */
+.track-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.download-track-btn {
+    color: #00ff66;
+    text-decoration: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+    display: inline-block;
+    transition: 0.2s;
+}
+.download-track-btn:hover {
+    color: #00cc55;
+    transform: scale(1.15);
+}
+.download-genre-btn {
+    background: #00ff66;
+    color: #0f0f13;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    border-radius: 3px;
+    font-weight: bold;
+    text-decoration: none;
+    transition: 0.2s;
+}
+.download-genre-btn:hover {
+    background: #00cc55;
+}

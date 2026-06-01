@@ -170,23 +170,45 @@ function renderAdminDashboard(data) {
         const tracks = data[genre];
         
         const genreBox = document.createElement('div');
-        genreBox.className = 'admin-genre-box';
+        genreBox.className = 'admin-genre-box collapsed'; // Inizia chiuso di default
         
         // Header
         const header = document.createElement('div');
         header.className = 'admin-genre-header';
+        header.onclick = (e) => {
+            // Evita il toggle se si clicca sui pulsanti o link nell'header
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
+            genreBox.classList.toggle('collapsed');
+        };
         
         const title = document.createElement('span');
         title.className = 'admin-genre-title';
         title.innerText = `/${genre}`;
         
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'admin-genre-actions';
+        actionsDiv.style.display = 'flex';
+        actionsDiv.style.gap = '10px';
+        actionsDiv.style.alignItems = 'center';
+        
+        const downloadGenreBtn = document.createElement('a');
+        downloadGenreBtn.className = 'download-genre-btn';
+        downloadGenreBtn.innerText = 'Scarica ZIP';
+        downloadGenreBtn.href = `/api/genres/download?genre=${encodeURIComponent(genre)}&pin=${encodeURIComponent(getPin())}`;
+        downloadGenreBtn.onclick = (e) => e.stopPropagation(); // Evita il toggle del collasso
+        
         const delGenreBtn = document.createElement('button');
         delGenreBtn.className = 'delete-genre-btn';
         delGenreBtn.innerText = 'Elimina Genere';
-        delGenreBtn.onclick = () => handleDeleteGenre(genre);
+        delGenreBtn.onclick = (e) => {
+            e.stopPropagation(); // Evita il toggle del collasso
+            handleDeleteGenre(genre);
+        };
         
+        actionsDiv.appendChild(downloadGenreBtn);
+        actionsDiv.appendChild(delGenreBtn);
         header.appendChild(title);
-        header.appendChild(delGenreBtn);
+        header.appendChild(actionsDiv);
         genreBox.appendChild(header);
         
         // Body
@@ -232,13 +254,24 @@ function renderAdminDashboard(data) {
                 trackName.className = 'track-name';
                 trackName.innerText = track;
                 
+                const trackActions = document.createElement('div');
+                trackActions.className = 'track-actions';
+                
+                const downloadTrackBtn = document.createElement('a');
+                downloadTrackBtn.className = 'download-track-btn';
+                downloadTrackBtn.innerText = '⬇';
+                downloadTrackBtn.title = 'Scarica brano';
+                downloadTrackBtn.href = `/api/tracks/download?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(track)}&pin=${encodeURIComponent(getPin())}`;
+                
                 const delTrackBtn = document.createElement('button');
                 delTrackBtn.className = 'delete-track-btn';
                 delTrackBtn.innerText = '✕';
                 delTrackBtn.onclick = () => handleDeleteTrack(genre, track);
                 
+                trackActions.appendChild(downloadTrackBtn);
+                trackActions.appendChild(delTrackBtn);
                 li.appendChild(trackName);
-                li.appendChild(delTrackBtn);
+                li.appendChild(trackActions);
                 trackList.appendChild(li);
             });
         }

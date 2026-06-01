@@ -4,6 +4,7 @@ body {
     color: #fff;
     font-family: 'Courier New', Courier, monospace;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
@@ -184,8 +185,16 @@ button:active {
 }
 
 @keyframes scroll-pingpong {
-    0%, 20% { transform: translateX(0); }
-    80%, 100% { transform: translateX(var(--overflow)); }
+
+    0%,
+    20% {
+        transform: translateX(0);
+    }
+
+    80%,
+    100% {
+        transform: translateX(var(--overflow));
+    }
 }
 
 #now-playing-time {

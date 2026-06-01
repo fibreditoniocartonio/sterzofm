@@ -19,19 +19,21 @@
     <div id="player-view" class="view hidden">
         <a href="/" class="back-btn">← Torna alla Home</a>
         <h2 id="current-genre">Genere</h2>
-        
-        <div class="controls" style="margin-bottom: 20px; display: flex; justify-content: center; gap: 15px;">
-            <button id="play-btn">PLAY</button>
-            <button id="fullscreen-btn" style="background: #333; color: #fff;">SCHERMO INTERO</button>
-        </div>
 
         <!-- Container che racchiude canzone e visualizer per il fullscreen -->
         <div id="visualizer-fullscreen-wrapper">
             <div class="now-playing-container">
-                <span id="now-playing-title">Nessun brano in riproduzione</span>
+                <span id="now-playing-title">Connessione in corso...</span>
                 <span id="now-playing-time">00:00 / 00:00</span>
             </div>
-            <div id="visualizer-container"></div>
+            <!-- Il visualizer ha position:relative per ancorare il bottone -->
+            <div id="visualizer-container">
+                <button id="fullscreen-btn" title="Schermo intero">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                        <path d="M3 3h6v2H5v4H3V3zm12 0h6v6h-2V5h-4V3zM3 15h2v4h4v2H3v-6zm16 4h-4v2h6v-6h-2v4z"/>
+                    </svg>
+                </button>
+            </div>
         </div>
         <audio id="radio-audio" crossorigin="anonymous"></audio>
     </div>

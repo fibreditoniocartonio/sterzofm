@@ -26,7 +26,7 @@ function route() {
     homeView.classList.add('hidden');
     playerView.classList.add('hidden');
     adminView.classList.add('hidden');
-    
+
     // Ferma il polling dei metadati ad ogni cambio rotta
     stopNowPlayingPolling();
 
@@ -35,8 +35,6 @@ function route() {
     if (audio && (hash === '#admin' || path === '/admin' || !cleanGenre || cleanGenre === "index.html")) {
         audio.pause();
         audio.src = '';
-        const playBtn = document.getElementById('play-btn');
-        if (playBtn) playBtn.innerText = "PLAY";
     }
 
     if (hash === '#admin' || path === '/admin') {
@@ -61,8 +59,8 @@ async function loadGenres() {
     const genres = await res.json();
     const container = document.getElementById('genres-container');
     container.innerHTML = ""; // Pulisce prima di caricare
-    
-    if(genres.length === 0) {
+
+    if (genres.length === 0) {
         container.innerHTML = "<p style='color:#666'>Nessun genere creato. Accedi all'area riservata per aggiungerne uno.</p>";
         return;
     }
@@ -127,7 +125,7 @@ loginBtn.onclick = async () => {
         loginError.innerText = "Inserisci il PIN";
         return;
     }
-    
+
     try {
         const res = await fetch('/api/admin/verify', {
             method: 'POST',
@@ -135,7 +133,7 @@ loginBtn.onclick = async () => {
             body: JSON.stringify({ pin })
         });
         const data = await res.json();
-        
+
         if (res.ok && data.success) {
             sessionStorage.setItem('admin_pin', pin);
             showDashboard();
@@ -158,13 +156,13 @@ async function loadAdminDashboard() {
         const res = await fetch('/api/admin/tracks', {
             headers: { 'X-PIN': getPin() }
         });
-        
+
         if (res.status === 401) {
             sessionStorage.removeItem('admin_pin');
             showLogin();
             return;
         }
-        
+
         const data = await res.json();
         renderAdminDashboard(data);
     } catch (e) {
@@ -177,29 +175,29 @@ function renderAdminDashboard(data) {
     adminGenresList.innerHTML = '';
     const genres = data.genres || [];
     const totalSize = data.totalSize || 0;
-    
+
     // Calcolo dello spazio occupato su Alwaysdata (limite 1 GB = 1024 MB)
     const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
     const limitMB = 1024;
     const percent = Math.min(((totalSize / (1024 * 1024 * 1024)) * 100), 100).toFixed(1);
-    
+
     // Aggiorna gli indicatori dello spazio su disco
     document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB / ${limitMB} MB (${percent}%)`;
     document.getElementById('space-usage-bar').style.width = `${percent}%`;
-    
+
     if (genres.length === 0) {
         adminGenresList.innerHTML = "<p style='color:#666; padding: 10px;'>Nessun genere creato. Usane uno sopra per cominciare.</p>";
         return;
     }
-    
+
     genres.forEach(genreObj => {
         const genre = genreObj.name;
         const genreSizeMB = (genreObj.size / (1024 * 1024)).toFixed(1);
         const tracks = genreObj.tracks || [];
-        
+
         const genreBox = document.createElement('div');
         genreBox.className = 'admin-genre-box collapsed'; // Inizia chiuso di default
-        
+
         // Header
         const header = document.createElement('div');
         header.className = 'admin-genre-header';
@@ -208,23 +206,23 @@ function renderAdminDashboard(data) {
             if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
             genreBox.classList.toggle('collapsed');
         };
-        
+
         const title = document.createElement('span');
         title.className = 'admin-genre-title';
         title.innerText = `/${genre} (${genreSizeMB} MB)`;
-        
+
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'admin-genre-actions';
         actionsDiv.style.display = 'flex';
         actionsDiv.style.gap = '10px';
         actionsDiv.style.alignItems = 'center';
-        
+
         const downloadGenreBtn = document.createElement('a');
         downloadGenreBtn.className = 'download-genre-btn';
         downloadGenreBtn.innerText = 'Scarica ZIP';
         downloadGenreBtn.href = `/api/genres/download?genre=${encodeURIComponent(genre)}&pin=${encodeURIComponent(getPin())}`;
         downloadGenreBtn.onclick = (e) => e.stopPropagation(); // Evita il toggle del collasso
-        
+
         const delGenreBtn = document.createElement('button');
         delGenreBtn.className = 'delete-genre-btn';
         delGenreBtn.innerText = 'Elimina Genere';
@@ -232,44 +230,44 @@ function renderAdminDashboard(data) {
             e.stopPropagation(); // Evita il toggle del collasso
             handleDeleteGenre(genre);
         };
-        
+
         actionsDiv.appendChild(downloadGenreBtn);
         actionsDiv.appendChild(delGenreBtn);
         header.appendChild(title);
         header.appendChild(actionsDiv);
         genreBox.appendChild(header);
-        
+
         // Body
         const body = document.createElement('div');
         body.className = 'admin-genre-body';
-        
+
         // Sezione Upload
         const uploadSec = document.createElement('div');
         uploadSec.className = 'upload-section';
-        
+
         const uploadLabel = document.createElement('label');
         uploadLabel.className = 'upload-btn-label';
         uploadLabel.innerText = 'Carica MP3';
-        
+
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'audio/mpeg';
         fileInput.style.display = 'none';
         fileInput.onchange = (e) => handleUpload(genre, e.target.files[0], statusSpan);
-        
+
         const statusSpan = document.createElement('span');
         statusSpan.className = 'upload-status';
         statusSpan.id = `status-${genre}`;
-        
+
         uploadLabel.appendChild(fileInput);
         uploadSec.appendChild(uploadLabel);
         uploadSec.appendChild(statusSpan);
         body.appendChild(uploadSec);
-        
+
         // Lista Tracce
         const trackList = document.createElement('ul');
         trackList.className = 'admin-track-list';
-        
+
         if (tracks.length === 0) {
             const emptyLi = document.createElement('li');
             emptyLi.innerHTML = "<span style='color:#555; font-style:italic;'>Nessuna traccia. Carica file MP3.</span>";
@@ -284,37 +282,34 @@ function renderAdminDashboard(data) {
                 const track = trackObj.name;
                 const trackSizeMB = (trackObj.size / (1024 * 1024)).toFixed(1);
                 const isHeavy = heaviestTracks.some(t => t.name === track && t.size === trackObj.size);
-                
+
                 const li = document.createElement('li');
-                
+
                 const trackName = document.createElement('span');
                 trackName.className = 'track-name';
                 trackName.innerText = track;
-                if (isHeavy) {
-                    trackName.classList.add('heavy-track');
-                }
-                
+
                 const trackActions = document.createElement('div');
                 trackActions.className = 'track-actions';
-                
+
                 const sizeSpan = document.createElement('span');
                 sizeSpan.className = 'track-size';
                 sizeSpan.innerText = `${trackSizeMB} MB`;
                 if (isHeavy) {
                     sizeSpan.classList.add('heavy-track');
                 }
-                
+
                 const downloadTrackBtn = document.createElement('a');
                 downloadTrackBtn.className = 'download-track-btn';
                 downloadTrackBtn.innerText = '⬇';
                 downloadTrackBtn.title = 'Scarica brano';
                 downloadTrackBtn.href = `/api/tracks/download?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(track)}&pin=${encodeURIComponent(getPin())}`;
-                
+
                 const delTrackBtn = document.createElement('button');
                 delTrackBtn.className = 'delete-track-btn';
                 delTrackBtn.innerText = '✕';
                 delTrackBtn.onclick = () => handleDeleteTrack(genre, track);
-                
+
                 trackActions.appendChild(sizeSpan);
                 trackActions.appendChild(downloadTrackBtn);
                 trackActions.appendChild(delTrackBtn);
@@ -323,7 +318,7 @@ function renderAdminDashboard(data) {
                 trackList.appendChild(li);
             });
         }
-        
+
         body.appendChild(trackList);
         genreBox.appendChild(body);
         adminGenresList.appendChild(genreBox);
@@ -337,7 +332,7 @@ createGenreBtn.onclick = async () => {
         genreError.innerText = "Nome genere non valido (usa solo lettere e numeri)";
         return;
     }
-    
+
     genreError.innerText = '';
     try {
         const res = await fetch('/api/genres', {
@@ -348,7 +343,7 @@ createGenreBtn.onclick = async () => {
             },
             body: JSON.stringify({ name })
         });
-        
+
         if (res.ok) {
             newGenreInput.value = '';
             loadAdminDashboard();
@@ -364,7 +359,7 @@ createGenreBtn.onclick = async () => {
 // Elimina Genere
 async function handleDeleteGenre(genre) {
     if (!confirm(`Sei sicuro di voler eliminare il genere "${genre}" e TUTTI i suoi brani?`)) return;
-    
+
     try {
         const res = await fetch(`/api/genres?genre=${encodeURIComponent(genre)}`, {
             method: 'DELETE',
@@ -383,7 +378,7 @@ async function handleDeleteGenre(genre) {
 // Elimina Traccia
 async function handleDeleteTrack(genre, filename) {
     if (!confirm(`Vuoi eliminare la traccia "${filename}" da "${genre}"?`)) return;
-    
+
     try {
         const res = await fetch(`/api/tracks?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(filename)}`, {
             method: 'DELETE',
@@ -407,24 +402,24 @@ function handleUpload(genre, file, statusSpan) {
         statusSpan.innerText = "Solo file MP3 ammessi!";
         return;
     }
-    
+
     statusSpan.style.color = '#00ff66';
     statusSpan.innerText = "Inizio caricamento...";
-    
+
     const xhr = new XMLHttpRequest();
     const url = `/api/upload?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(file.name)}`;
-    
+
     xhr.open('POST', url, true);
     xhr.setRequestHeader('X-PIN', getPin());
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    
+
     xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
             const percent = Math.round((e.loaded / e.total) * 100);
             statusSpan.innerText = `Caricamento: ${percent}%`;
         }
     });
-    
+
     xhr.addEventListener('load', () => {
         if (xhr.status === 200) {
             statusSpan.innerText = "Caricato con successo!";
@@ -436,12 +431,12 @@ function handleUpload(genre, file, statusSpan) {
             statusSpan.innerText = `Errore: ${xhr.statusText || 'fallito'}`;
         }
     });
-    
+
     xhr.addEventListener('error', () => {
         statusSpan.style.color = '#ff3366';
         statusSpan.innerText = "Errore di connessione!";
     });
-    
+
     xhr.send(file);
 }
 
@@ -449,24 +444,24 @@ function handleUpload(genre, file, statusSpan) {
 
 function startNowPlayingPolling(genreName) {
     if (nowPlayingInterval) clearInterval(nowPlayingInterval);
-    
+
     async function tick() {
         try {
             const res = await fetch(`/api/now-playing?genre=${encodeURIComponent(genreName)}`);
             if (res.ok) {
                 const data = await res.json();
-                
+
                 // Formatta il minutaggio trascorso in mm:ss
                 const elapsedMin = Math.floor(data.elapsed / 60).toString().padStart(2, '0');
                 const elapsedSec = (data.elapsed % 60).toString().padStart(2, '0');
-                
+
                 // Formatta la durata totale in mm:ss
                 const durationMin = Math.floor(data.duration / 60).toString().padStart(2, '0');
                 const durationSec = (data.duration % 60).toString().padStart(2, '0');
-                
+
                 // Rimuove l'estensione del file per un titolo pulito
                 const cleanTitle = data.track ? data.track.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
-                
+
                 document.getElementById('now-playing-title').innerText = cleanTitle;
                 document.getElementById('now-playing-time').innerText = `${elapsedMin}:${elapsedSec} / ${durationMin}:${durationSec}`;
             }
@@ -474,7 +469,7 @@ function startNowPlayingPolling(genreName) {
             console.error("Errore nel recupero now-playing:", e);
         }
     }
-    
+
     tick(); // Esegui subito al caricamento
     nowPlayingInterval = setInterval(tick, 1000);
 }
@@ -488,20 +483,39 @@ function stopNowPlayingPolling() {
 
 function setupPlayer(genreName) {
     const audio = document.getElementById('radio-audio');
-    const playBtn = document.getElementById('play-btn');
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const fullscreenWrapper = document.getElementById('visualizer-fullscreen-wrapper');
-    
-    // Inizializzazione pulita
+
+    // Imposta la sorgente e resetta i metadati
     audio.src = `/stream/${genreName}`;
-    playBtn.innerText = "PLAY";
-    document.getElementById('now-playing-title').innerText = "Calcolo in corso...";
+    document.getElementById('now-playing-title').innerText = "Connessione in corso...";
     document.getElementById('now-playing-time').innerText = "00:00 / 00:00";
-    
-    // Avvia il polling periodico
+
+    // Avvia il polling periodico dei metadati
     startNowPlayingPolling(genreName);
 
-    // Gestione dello Schermo Intero nativo del wrapper
+    // Inizializza audioMotion una sola volta per non creare duplicati
+    if (!audioMotion) {
+        audioMotion = new AudioMotionAnalyzer(
+            document.getElementById('visualizer-container'),
+            {
+                source: audio,
+                height: 300,
+                ansiColors: true,
+                mode: 5,
+                barSpace: 2,
+                ledFormat: 'row',
+                showScaleX: false,
+                showScaleY: false,
+                showPeaks: true,
+                overlay: true,
+                bgAlpha: 0,
+                gradient: 'prism'
+            }
+        );
+    }
+
+    // Pulsante fullscreen (icona SVG in basso a destra del visualizer)
     fullscreenBtn.onclick = () => {
         if (!document.fullscreenElement) {
             fullscreenWrapper.requestFullscreen().catch(err => {
@@ -512,41 +526,17 @@ function setupPlayer(genreName) {
         }
     };
 
-    // Inizializza audioMotion una sola volta per non creare duplicati
-    if (!audioMotion) {
-        audioMotion = new AudioMotionAnalyzer(
-            document.getElementById('visualizer-container'),
-            {
-                source: audio,
-                height: 350,
-                ansiColors: true,
-                mode: 5, // Spettrometro ad alta risoluzione
-                barSpace: 2,
-                ledFormat: 'row',
-                showScaleX: false,
-                showScaleY: false,
-                showPeaks: true,
-                overlay: true,
-                bgAlpha: 0,
-                gradient: 'prism' // Gradiente super vibrante e premium
-            }
-        );
-    }
-
-    playBtn.onclick = () => {
-        if (audio.paused) {
-            // Ricarica la sorgente audio live per essere in sincrono immediato ed evitare ritardi
-            audio.load();
+    // Auto-play immediato: carica e riproduce senza che l'utente debba cliccare nulla
+    audio.load();
+    audio.play().catch(() => {
+        // Alcuni browser bloccano l'autoplay senza interazione utente.
+        // In quel caso aspettiamo il primo click sulla pagina per avviare.
+        const startOnInteraction = () => {
             audio.play().then(() => {
-                // Ripristina o attiva l'AudioContext dell'analyzer se necessario
-                if (audioMotion && audioMotion.audioCtx) {
-                    audioMotion.audioCtx.resume();
-                }
+                if (audioMotion && audioMotion.audioCtx) audioMotion.audioCtx.resume();
             });
-            playBtn.innerText = "PAUSE";
-        } else {
-            audio.pause();
-            playBtn.innerText = "PLAY";
-        }
-    };
+            document.removeEventListener('click', startOnInteraction);
+        };
+        document.addEventListener('click', startOnInteraction, { once: true });
+    });
 }

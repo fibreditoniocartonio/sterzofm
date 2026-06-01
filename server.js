@@ -520,6 +520,15 @@ const server = http.createServer((req, res) => {
         });
 
         writeStream.on('finish', () => {
+            // Recupera l'istanza della radio di questo genere
+            const station = activeStations.get(genre);
+            if (station && station.queue) {
+                // Genera una posizione casuale nella coda attuale per inserire la nuova canzone
+                const randomIndex = Math.floor(Math.random() * (station.queue.length + 1));
+                station.queue.splice(randomIndex, 0, filename);
+                console.log(`[${genre}] Canzone nuova '${filename}' inserita nella coda alla posizione ${randomIndex}`);
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
         });

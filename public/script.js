@@ -442,28 +442,96 @@ function handleUpload(genre, file, statusSpan) {
 
 // 3. LOGICA PLAYER AUDIO + VISUALIZER CON AUDIOMOTION (SOLO WEB CLIENT)
 
+let trackHistory = [];
+
 function startNowPlayingPolling(genreName) {
     if (nowPlayingInterval) clearInterval(nowPlayingInterval);
+    trackHistory = []; // Reset history on new genre
 
     async function tick() {
         try {
             const res = await fetch(`/api/now-playing?genre=${encodeURIComponent(genreName)}`);
             if (res.ok) {
                 const data = await res.json();
+                const audio = document.getElementById('radio-audio');
 
-                // Formatta il minutaggio trascorso in mm:ss
-                const elapsedMin = Math.floor(data.elapsed / 60).toString().padStart(2, '0');
-                const elapsedSec = (data.elapsed % 60).toString().padStart(2, '0');
+                let endBuf = 0;
+                if (audio && audio.buffered && audio.buffered.length > 0) {
+                    endBuf = audio.buffered.end(audio.buffered.length - 1);
+                }
 
-                // Formatta la durata totale in mm:ss
-                const durationMin = Math.floor(data.duration / 60).toString().padStart(2, '0');
-                const durationSec = (data.duration % 60).toString().padStart(2, '0');
+                // Calcoliamo l'offset tra il tempo del server e il buffer del client
+                let currentSyncOffset = data.elapsed - endBuf;
 
-                // Rimuove l'estensione del file per un titolo pulito
-                const cleanTitle = data.track ? data.track.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
+                let lastHistory = trackHistory[trackHistory.length - 1];
+                if (!lastHistory || lastHistory.track !== data.track) {
+                    trackHistory.push({
+                        track: data.track,
+                        duration: data.duration,
+                        syncOffset: currentSyncOffset
+                    });
+                } else {
+                    // Smoothing dell'offset per assorbire i micro-scatti di rete
+                    lastHistory.syncOffset = (lastHistory.syncOffset * 0.9) + (currentSyncOffset * 0.1);
+                    lastHistory.duration = data.duration;
+                }
 
-                document.getElementById('now-playing-title').innerText = cleanTitle;
-                document.getElementById('now-playing-time').innerText = `${elapsedMin}:${elapsedSec} / ${durationMin}:${durationSec}`;
+                // Troviamo quale brano stiamo effettivamente ascoltando
+                let activeTrack = trackHistory[0];
+                let activeElapsed = 0;
+
+                for (let i = trackHistory.length - 1; i >= 0; i--) {
+                    let th = trackHistory[i];
+                    let trackElapsed = (audio ? audio.currentTime : 0) + th.syncOffset;
+                    if (trackElapsed >= 0) {
+                        activeTrack = th;
+                        activeElapsed = trackElapsed;
+                        break;
+                    }
+                }
+
+                if (!activeTrack && trackHistory.length > 0) {
+                    activeTrack = trackHistory[0];
+                    activeElapsed = 0;
+                }
+                if (activeElapsed < 0) activeElapsed = 0;
+
+                // Rimuovi vecchi brani per non riempire la memoria
+                if (trackHistory.length > 3) trackHistory.shift();
+
+                const displayTrack = activeTrack ? activeTrack.track : data.track;
+                const displayDuration = activeTrack ? activeTrack.duration : data.duration;
+                let displayElapsed = activeTrack ? Math.round(activeElapsed) : data.elapsed;
+                if (displayElapsed > displayDuration && displayDuration > 0) displayElapsed = displayDuration;
+
+                const elapsedMin = Math.floor(displayElapsed / 60).toString().padStart(2, '0');
+                const elapsedSec = (displayElapsed % 60).toString().padStart(2, '0');
+                const durationMin = Math.floor(displayDuration / 60).toString().padStart(2, '0');
+                const durationSec = (displayDuration % 60).toString().padStart(2, '0');
+
+                const cleanTitle = displayTrack ? displayTrack.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
+
+                const wrapper = document.getElementById('now-playing-title-wrapper');
+                const title = document.getElementById('now-playing-title');
+                
+                // Aggiorna il testo se cambiato e gestisci il marquee se troppo lungo
+                if (title && title.innerText !== cleanTitle) {
+                    title.innerText = cleanTitle;
+                    title.classList.remove('scrolling-text');
+                    title.style.removeProperty('--overflow');
+                    
+                    // Diamo tempo al DOM di ricalcolare la larghezza
+                    setTimeout(() => {
+                        if (wrapper && title.scrollWidth > wrapper.clientWidth) {
+                            const overflow = title.scrollWidth - wrapper.clientWidth;
+                            title.style.setProperty('--overflow', `-${overflow + 20}px`);
+                            title.classList.add('scrolling-text');
+                        }
+                    }, 50);
+                }
+
+                const timeElem = document.getElementById('now-playing-time');
+                if (timeElem) timeElem.innerText = `${elapsedMin}:${elapsedSec} / ${durationMin}:${durationSec}`;
             }
         } catch (e) {
             console.error("Errore nel recupero now-playing:", e);

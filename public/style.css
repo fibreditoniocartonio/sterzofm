@@ -160,15 +160,32 @@ button:active {
     box-sizing: border-box;
 }
 
+.title-wrapper {
+    flex: 1;
+    max-width: 75%;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+    text-align: left;
+    mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+}
+
 #now-playing-title {
+    display: inline-block;
     color: #ff007f;
     font-weight: bold;
     text-shadow: 0 0 10px rgba(255, 0, 127, 0.3);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 70%;
-    text-align: left;
+}
+
+.scrolling-text {
+    animation: scroll-pingpong 8s ease-in-out infinite alternate;
+}
+
+@keyframes scroll-pingpong {
+    0%, 20% { transform: translateX(0); }
+    80%, 100% { transform: translateX(var(--overflow)); }
 }
 
 #now-playing-time {

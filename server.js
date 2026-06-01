@@ -15,27 +15,27 @@ function getMp3Bitrate(filePath) {
         const fd = fs.openSync(filePath, 'r');
         const headerBuffer = Buffer.alloc(10);
         fs.readSync(fd, headerBuffer, 0, 10, 0);
-        
+
         let startOffset = 0;
         if (headerBuffer.toString('utf8', 0, 3) === 'ID3') {
             const size = ((headerBuffer[6] & 0x7F) << 21) |
-                         ((headerBuffer[7] & 0x7F) << 14) |
-                         ((headerBuffer[8] & 0x7F) << 7) |
-                         (headerBuffer[9] & 0x7F);
+                ((headerBuffer[7] & 0x7F) << 14) |
+                ((headerBuffer[8] & 0x7F) << 7) |
+                (headerBuffer[9] & 0x7F);
             startOffset = size + 10;
         }
-        
+
         const scanBuffer = Buffer.alloc(8192);
         const bytesRead = fs.readSync(fd, scanBuffer, 0, 8192, startOffset);
         fs.closeSync(fd);
-        
+
         let i = 0;
         while (i < bytesRead - 4) {
-            if (scanBuffer[i] === 0xFF && (scanBuffer[i+1] & 0xE0) === 0xE0) {
-                const mpegVersion = (scanBuffer[i+1] & 0x18) >> 3;
-                const layer = (scanBuffer[i+1] & 0x06) >> 1;
-                const bitrateIndex = (scanBuffer[i+2] & 0xF0) >> 4;
-                
+            if (scanBuffer[i] === 0xFF && (scanBuffer[i + 1] & 0xE0) === 0xE0) {
+                const mpegVersion = (scanBuffer[i + 1] & 0x18) >> 3;
+                const layer = (scanBuffer[i + 1] & 0x06) >> 1;
+                const bitrateIndex = (scanBuffer[i + 2] & 0xF0) >> 4;
+
                 if (layer === 1 && bitrateIndex > 0 && bitrateIndex < 15) {
                     if (mpegVersion === 3) {
                         const bitrates = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
@@ -64,6 +64,38 @@ class RadioStation {
         this.genre = genre;
         this.clients = new Set();
         this.isPlaying = false;
+
+        // Nuove variabili per lo shuffle
+        this.queue = [];                   // La coda dei brani da riprodurre
+        this.history = [];                 // Memoria delle ultime 5 canzoni suonate
+        this.lastPlayedDay = new Date().getDate(); // Giorno corrente per il reset di mezzanotte
+    }
+
+    // Metodo per mescolare l'array (Algoritmo Fisher-Yates super leggero)
+    reshuffle(files) {
+        let shuffled = [...files];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+
+        // Logica Anti-Ripetizione: Evita che le ultime 5 canzoni suonate finiscano all'inizio della nuova coda
+        if (shuffled.length >= 10 && this.history.length > 0) {
+            for (let i = 0; i < 5; i++) {
+                if (this.history.includes(shuffled[i])) {
+                    // Prende la canzone incriminata e la scambia con una a caso nella SECONDA METÀ della coda
+                    let safeIndex = Math.floor(Math.random() * (shuffled.length / 2)) + Math.floor(shuffled.length / 2);
+                    [shuffled[i], shuffled[safeIndex]] = [shuffled[safeIndex], shuffled[i]];
+                }
+            }
+        } else if (shuffled.length > 1 && this.history.length > 0) {
+            // Se ci sono poche canzoni, assicuriamoci almeno che la primissima non sia l'ultimissima appena suonata
+            if (shuffled[0] === this.history[this.history.length - 1]) {
+                [shuffled[0], shuffled[shuffled.length - 1]] = [shuffled[shuffled.length - 1], shuffled[0]];
+            }
+        }
+
+        this.queue = shuffled;
     }
 
     start() {
@@ -81,30 +113,49 @@ class RadioStation {
 
         const files = fs.readdirSync(genreDir).filter(f => f.endsWith('.mp3'));
         if (files.length === 0) {
-            // Se non ci sono canzoni, ricontrolla ogni 5 secondi
+            // Se non ci sono canzoni, svuota la coda e aspetta
+            this.queue = [];
             setTimeout(() => this.playNext(), 5000);
             return;
         }
 
-        // Sceglie una canzone casuale dal genere
-        const randomFile = files[Math.floor(Math.random() * files.length)];
-        const filePath = path.join(genreDir, randomFile);
-        
+        const currentDay = new Date().getDate();
+
+        // Controllo di sicurezza: ripulisce la coda se qualche file è stato cancellato via pannello Admin
+        this.queue = this.queue.filter(f => files.includes(f));
+
+        // Dobbiamo rimescolare se: la coda è vuota OPPURE è scattata la mezzanotte (giorno cambiato)
+        if (this.queue.length === 0 || currentDay !== this.lastPlayedDay) {
+            this.reshuffle(files);
+            this.lastPlayedDay = currentDay;
+            console.log(`[${this.genre}] Nuovo shuffle generato! Brani in coda: ${this.queue.length}`);
+        }
+
+        // Pesca la prima canzone dalla coda e la rimuove dall'array
+        const trackToPlay = this.queue.shift();
+
+        // Aggiorna la memoria (history) delle ultime 5 canzoni
+        this.history.push(trackToPlay);
+        if (this.history.length > 5) {
+            this.history.shift(); // Rimuove la più vecchia per mantenere l'array a 5
+        }
+
+        const filePath = path.join(genreDir, trackToPlay);
+
         // Rileva il bitrate dinamico dell'MP3
         const bitrate = getMp3Bitrate(filePath);
 
         // Tracciamento canzone corrente per l'API now-playing
-        this.currentTrack = randomFile;
+        this.currentTrack = trackToPlay;
         this.trackStartedAt = Date.now();
         const fileSize = fs.statSync(filePath).size;
         // durata stimata: dimensione / (bitrate kbps → byte/s)
         this.trackDuration = Math.round(fileSize / ((bitrate * 1000) / 8));
-        
+
         const fd = fs.openSync(filePath, 'r');
         let offset = 0;
-        
+
         const intervalTime = 100;
-        // bitrate (kbps) * 1000 = bits/s. / 8 = bytes/s. * (intervalTime/1000) = bytes per chunk.
         const chunkSize = Math.round((bitrate * 1000) / 8 * (intervalTime / 1000));
 
         this.loopInterval = setInterval(() => {
@@ -120,14 +171,14 @@ class RadioStation {
             if (bytesRead === 0) {
                 clearInterval(this.loopInterval);
                 fs.closeSync(fd);
-                this.playNext(); // Passa alla prossima canzone
+                this.playNext(); // Passa alla prossima canzone (che verrà pescata dalla coda)
                 return;
             }
 
             offset += bytesRead;
             const dataChunk = buffer.subarray(0, bytesRead);
 
-            // Invia il blocco audio a tutti i client connessi (Web, VLC, MPV)
+            // Invia il blocco audio a tutti i client
             for (let client of this.clients) {
                 client.write(dataChunk);
             }
@@ -273,7 +324,7 @@ const server = http.createServer((req, res) => {
             const packer = spawn(cmd, args, { cwd: genreDir });
 
             packer.stdout.pipe(res);
-            
+
             packer.stderr.on('data', (data) => {
                 console.error(`Errore di compressione: ${data}`);
             });
@@ -330,7 +381,7 @@ const server = http.createServer((req, res) => {
             for (const genreName of folders) {
                 const genreDir = path.join(TRACKS_DIR, genreName);
                 const files = fs.readdirSync(genreDir).filter(f => f.endsWith('.mp3'));
-                
+
                 const tracks = [];
                 let genreSize = 0;
                 for (const file of files) {
@@ -339,7 +390,7 @@ const server = http.createServer((req, res) => {
                     tracks.push({ name: file, size: stat.size });
                     genreSize += stat.size;
                 }
-                
+
                 genres.push({ name: genreName, size: genreSize, tracks });
                 totalSize += genreSize;
             }

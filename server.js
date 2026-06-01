@@ -1,7 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { Throttle } = require('throttle');
+const Throttle = require('throttle');
 const archiver = require('archiver');
 const fsPromises = fs.promises;
 

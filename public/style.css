@@ -227,36 +227,6 @@ canvas { width: 100%; height: 150px; background: #141419; margin-top: 20px; bord
     background: #00cc55;
 }
 
-/* Griglie responsive per desktop */
-#genres-container {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 15px;
-    margin-top: 20px;
-}
-
-.admin-list-container {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 20px;
-    margin-top: 20px;
-}
-
-@media (min-width: 768px) {
-    #genres-container {
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    }
-    
-    .admin-list-container {
-        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    }
-    
-    /* Su desktop, evita lo stretch delle schede dei generi nella home */
-    .genre-card {
-        margin: 0;
-    }
-}
-
 /* Styling del Monitor dello Spazio su Disco Alwaysdata */
 .space-usage-container {
     margin-top: 30px;

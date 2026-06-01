@@ -9,9 +9,24 @@ body {
     min-height: 100vh;
     text-align: center;
 }
-.view { width: 95%; max-width: 1200px; padding: 20px; box-sizing: border-box; }
-.hidden { display: none !important; }
-h1 { font-size: 3rem; letter-spacing: 2px; color: #ff007f; }
+
+.view {
+    width: 95%;
+    max-width: 1200px;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.hidden {
+    display: none !important;
+}
+
+h1 {
+    font-size: 3rem;
+    letter-spacing: 2px;
+    color: #ff007f;
+}
+
 .genre-card {
     background: #1c1c24;
     padding: 15px;
@@ -23,16 +38,45 @@ h1 { font-size: 3rem; letter-spacing: 2px; color: #ff007f; }
     border: 1px solid #333;
     transition: 0.2s;
 }
-.genre-card:hover { border-color: #ff007f; background: #252530; }
-.live-indicator { color: #00ff66; animation: blink 1.5s infinite; font-size: 0.8rem; }
-@keyframes blink { 50% { opacity: 0; } }
+
+.genre-card:hover {
+    border-color: #ff007f;
+    background: #252530;
+}
+
+.live-indicator {
+    color: #00ff66;
+    animation: blink 1.5s infinite;
+    font-size: 0.8rem;
+}
+
+@keyframes blink {
+    50% {
+        opacity: 0;
+    }
+}
+
 button {
-    background: #ff007f; color: white; border: none; padding: 15px 30px;
-    font-size: 1rem; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 5px;
+    background: #ff007f;
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    font-size: 1rem;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    border-radius: 5px;
     transition: background 0.2s, transform 0.1s;
 }
-button:hover { background: #e0006c; transform: translateY(-1px); }
-button:active { transform: translateY(1px); }
+
+button:hover {
+    background: #e0006c;
+    transform: translateY(-1px);
+}
+
+button:active {
+    transform: translateY(1px);
+}
 
 #visualizer-fullscreen-wrapper {
     background: #141419;
@@ -63,7 +107,8 @@ button:active { transform: translateY(1px); }
     border-radius: 6px;
     overflow: visible;
     background: #0f0f13;
-    position: relative; /* Necessario per posizionare il pulsante fullscreen */
+    position: relative;
+    /* Necessario per posizionare il pulsante fullscreen */
 }
 
 /* In fullscreen, il visualizer prende tutto lo spazio residuo */
@@ -87,7 +132,7 @@ button:active { transform: translateY(1px); }
     right: 10px;
     background: rgba(0, 0, 0, 0.5);
     color: #fff;
-    border: 1px solid rgba(255,255,255,0.15);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 4px;
     padding: 5px 7px;
     cursor: pointer;
@@ -95,6 +140,7 @@ button:active { transform: translateY(1px); }
     z-index: 10;
     transition: background 0.2s, transform 0.1s;
 }
+
 #fullscreen-btn:hover {
     background: rgba(255, 0, 127, 0.6);
     transform: none;
@@ -132,8 +178,17 @@ button:active { transform: translateY(1px); }
     white-space: nowrap;
 }
 
-.back-btn, .admin-link { color: #888; text-decoration: none; font-size: 0.9rem; }
-.back-btn:hover, .admin-link:hover { color: #fff; }
+.back-btn,
+.admin-link {
+    color: #888;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.back-btn:hover,
+.admin-link:hover {
+    color: #fff;
+}
 
 .player-header {
     display: flex;
@@ -142,7 +197,6 @@ button:active { transform: translateY(1px); }
     width: 100%;
     margin-bottom: 20px;
     padding: 10px 0;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
 .genre-title-container {
@@ -150,6 +204,7 @@ button:active { transform: translateY(1px); }
     align-items: center;
     gap: 12px;
 }
+
 #current-genre {
     margin: 0;
     font-size: 2.2rem;
@@ -157,6 +212,7 @@ button:active { transform: translateY(1px); }
     text-transform: uppercase;
     letter-spacing: 1px;
 }
+
 #copy-stream-btn {
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -173,12 +229,14 @@ button:active { transform: translateY(1px); }
     width: auto;
     height: auto;
 }
+
 #copy-stream-btn:hover {
     background: rgba(255, 0, 127, 0.1);
     border-color: #ff007f;
     color: #ff007f;
     transform: scale(1.05);
 }
+
 #copy-stream-btn:active {
     transform: scale(0.95);
 }
@@ -192,12 +250,16 @@ button:active { transform: translateY(1px); }
     margin-top: 20px;
     text-align: left;
 }
-.pin-form, .admin-top-bar {
+
+.pin-form,
+.admin-top-bar {
     display: flex;
     gap: 10px;
     margin-top: 15px;
 }
-.pin-form input, .admin-top-bar input {
+
+.pin-form input,
+.admin-top-bar input {
     flex: 1;
     background: #0f0f13;
     border: 1px solid #333;
@@ -209,23 +271,30 @@ button:active { transform: translateY(1px); }
     outline: none;
     transition: border-color 0.2s;
 }
-.pin-form input:focus, .admin-top-bar input:focus {
+
+.pin-form input:focus,
+.admin-top-bar input:focus {
     border-color: #ff007f;
 }
-.pin-form button, .admin-top-bar button {
+
+.pin-form button,
+.admin-top-bar button {
     padding: 10px 20px;
 }
+
 .error-msg {
     color: #ff3366;
     font-size: 0.85rem;
     margin-top: 10px;
     min-height: 1.2rem;
 }
+
 .admin-list-container {
     margin-top: 20px;
     max-height: 400px;
     overflow-y: auto;
 }
+
 .admin-genre-box {
     background: #1c1c24;
     border: 1px solid #333;
@@ -233,6 +302,7 @@ button:active { transform: translateY(1px); }
     margin-bottom: 15px;
     overflow: hidden;
 }
+
 .admin-genre-header {
     background: #252530;
     padding: 12px 15px;
@@ -241,23 +311,28 @@ button:active { transform: translateY(1px); }
     align-items: center;
     border-bottom: 1px solid #333;
 }
+
 .admin-genre-title {
     font-weight: bold;
     color: #ff007f;
     text-transform: uppercase;
 }
+
 .delete-genre-btn {
     background: #aa2222;
     padding: 5px 10px;
     font-size: 0.8rem;
     border-radius: 3px;
 }
+
 .delete-genre-btn:hover {
     background: #cc3333;
 }
+
 .admin-genre-body {
     padding: 15px;
 }
+
 .upload-section {
     display: flex;
     align-items: center;
@@ -266,6 +341,7 @@ button:active { transform: translateY(1px); }
     border-bottom: 1px dashed #333;
     padding-bottom: 12px;
 }
+
 .upload-btn-label {
     background: #333;
     color: #fff;
@@ -277,19 +353,23 @@ button:active { transform: translateY(1px); }
     display: inline-block;
     transition: 0.2s;
 }
+
 .upload-btn-label:hover {
     background: #444;
     border-color: #ff007f;
 }
+
 .upload-status {
     font-size: 0.8rem;
     color: #00ff66;
 }
+
 .admin-track-list {
     list-style: none;
     padding: 0;
     margin: 0;
 }
+
 .admin-track-list li {
     display: flex;
     justify-content: space-between;
@@ -298,9 +378,11 @@ button:active { transform: translateY(1px); }
     font-size: 0.85rem;
     border-bottom: 1px solid #222;
 }
+
 .admin-track-list li:last-child {
     border-bottom: none;
 }
+
 .track-name {
     color: #ccc;
     white-space: nowrap;
@@ -308,14 +390,17 @@ button:active { transform: translateY(1px); }
     text-overflow: ellipsis;
     max-width: 80%;
 }
+
 .track-size {
     color: #888;
     font-size: 0.85rem;
     font-family: monospace;
 }
+
 .heavy-track {
     color: #ff3366 !important;
 }
+
 .delete-track-btn {
     background: transparent;
     color: #ff3366;
@@ -324,6 +409,7 @@ button:active { transform: translateY(1px); }
     font-size: 0.9rem;
     cursor: pointer;
 }
+
 .delete-track-btn:hover {
     color: #ff0000;
     background: rgba(255, 0, 0, 0.1);
@@ -334,10 +420,12 @@ button:active { transform: translateY(1px); }
 .admin-genre-box.collapsed .admin-genre-body {
     display: none !important;
 }
+
 .admin-genre-header {
     cursor: pointer;
     user-select: none;
 }
+
 .admin-genre-title::before {
     content: '▼ ';
     display: inline-block;
@@ -346,6 +434,7 @@ button:active { transform: translateY(1px); }
     transition: transform 0.2s;
     color: #ff007f;
 }
+
 .admin-genre-box.collapsed .admin-genre-title::before {
     content: '▶ ';
 }
@@ -356,6 +445,7 @@ button:active { transform: translateY(1px); }
     align-items: center;
     gap: 10px;
 }
+
 .download-track-btn {
     color: #00ff66;
     text-decoration: none;
@@ -365,10 +455,12 @@ button:active { transform: translateY(1px); }
     display: inline-block;
     transition: 0.2s;
 }
+
 .download-track-btn:hover {
     color: #00cc55;
     transform: scale(1.15);
 }
+
 .download-genre-btn {
     background: #00ff66;
     color: #0f0f13;
@@ -379,6 +471,7 @@ button:active { transform: translateY(1px); }
     text-decoration: none;
     transition: 0.2s;
 }
+
 .download-genre-btn:hover {
     background: #00cc55;
 }
@@ -391,6 +484,7 @@ button:active { transform: translateY(1px); }
     text-align: left;
     width: 100%;
 }
+
 .space-usage-header {
     display: flex;
     justify-content: space-between;
@@ -399,6 +493,7 @@ button:active { transform: translateY(1px); }
     margin-bottom: 8px;
     font-weight: bold;
 }
+
 .space-usage-bar-bg {
     background: #0f0f13;
     border: 1px solid #333;
@@ -407,6 +502,7 @@ button:active { transform: translateY(1px); }
     overflow: hidden;
     width: 100%;
 }
+
 .space-usage-bar-fill {
     background: linear-gradient(90deg, #ff007f, #00ff66);
     height: 100%;

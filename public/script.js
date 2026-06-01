@@ -22,6 +22,18 @@ function route() {
     homeView.classList.add('hidden');
     playerView.classList.add('hidden');
     adminView.classList.add('hidden');
+    
+    // Ferma il polling dei metadati ad ogni cambio rotta
+    stopNowPlayingPolling();
+
+    // Se lasciamo la pagina del player, fermiamo l'audio per evitare riproduzioni orfane
+    const audio = document.getElementById('radio-audio');
+    if (audio && (hash === '#admin' || path === '/admin' || !cleanGenre || cleanGenre === "index.html")) {
+        audio.pause();
+        audio.src = '';
+        const playBtn = document.getElementById('play-btn');
+        if (playBtn) playBtn.innerText = "PLAY";
+    }
 
     if (hash === '#admin' || path === '/admin') {
         adminView.classList.remove('hidden');
@@ -259,18 +271,34 @@ function renderAdminDashboard(data) {
             emptyLi.innerHTML = "<span style='color:#555; font-style:italic;'>Nessuna traccia. Carica file MP3.</span>";
             trackList.appendChild(emptyLi);
         } else {
+            // Trova i 5 brani più pesanti del genere per colorarli in rosso
+            const heaviestTracks = [...tracks]
+                .sort((a, b) => b.size - a.size)
+                .slice(0, 5);
+
             tracks.forEach(trackObj => {
                 const track = trackObj.name;
                 const trackSizeMB = (trackObj.size / (1024 * 1024)).toFixed(1);
+                const isHeavy = heaviestTracks.some(t => t.name === track && t.size === trackObj.size);
                 
                 const li = document.createElement('li');
                 
                 const trackName = document.createElement('span');
                 trackName.className = 'track-name';
-                trackName.innerText = `${track} (${trackSizeMB} MB)`;
+                trackName.innerText = track;
+                if (isHeavy) {
+                    trackName.classList.add('heavy-track');
+                }
                 
                 const trackActions = document.createElement('div');
                 trackActions.className = 'track-actions';
+                
+                const sizeSpan = document.createElement('span');
+                sizeSpan.className = 'track-size';
+                sizeSpan.innerText = `${trackSizeMB} MB`;
+                if (isHeavy) {
+                    sizeSpan.classList.add('heavy-track');
+                }
                 
                 const downloadTrackBtn = document.createElement('a');
                 downloadTrackBtn.className = 'download-track-btn';
@@ -283,6 +311,7 @@ function renderAdminDashboard(data) {
                 delTrackBtn.innerText = '✕';
                 delTrackBtn.onclick = () => handleDeleteTrack(genre, track);
                 
+                trackActions.appendChild(sizeSpan);
                 trackActions.appendChild(downloadTrackBtn);
                 trackActions.appendChild(delTrackBtn);
                 li.appendChild(trackName);
@@ -412,62 +441,110 @@ function handleUpload(genre, file, statusSpan) {
     xhr.send(file);
 }
 
-// 3. LOGICA PLAYER AUDIO + VISUALIZER (SOLO WEB CLIENT)
+// 3. LOGICA PLAYER AUDIO + VISUALIZER CON AUDIOMOTION (SOLO WEB CLIENT)
+let nowPlayingInterval = null;
+let audioMotion = null;
+
+function startNowPlayingPolling(genreName) {
+    if (nowPlayingInterval) clearInterval(nowPlayingInterval);
+    
+    async function tick() {
+        try {
+            const res = await fetch(`/api/now-playing?genre=${encodeURIComponent(genreName)}`);
+            if (res.ok) {
+                const data = await res.json();
+                
+                // Formatta il minutaggio trascorso in mm:ss
+                const elapsedMin = Math.floor(data.elapsed / 60).toString().padStart(2, '0');
+                const elapsedSec = (data.elapsed % 60).toString().padStart(2, '0');
+                
+                // Formatta la durata totale in mm:ss
+                const durationMin = Math.floor(data.duration / 60).toString().padStart(2, '0');
+                const durationSec = (data.duration % 60).toString().padStart(2, '0');
+                
+                // Rimuove l'estensione del file per un titolo pulito
+                const cleanTitle = data.track ? data.track.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
+                
+                document.getElementById('now-playing-title').innerText = cleanTitle;
+                document.getElementById('now-playing-time').innerText = `${elapsedMin}:${elapsedSec} / ${durationMin}:${durationSec}`;
+            }
+        } catch (e) {
+            console.error("Errore nel recupero now-playing:", e);
+        }
+    }
+    
+    tick(); // Esegui subito al caricamento
+    nowPlayingInterval = setInterval(tick, 1000);
+}
+
+function stopNowPlayingPolling() {
+    if (nowPlayingInterval) {
+        clearInterval(nowPlayingInterval);
+        nowPlayingInterval = null;
+    }
+}
+
 function setupPlayer(genreName) {
     const audio = document.getElementById('radio-audio');
     const playBtn = document.getElementById('play-btn');
-    const canvas = document.getElementById('visualizer');
-    const ctx = canvas.getContext('2d');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const fullscreenWrapper = document.getElementById('visualizer-fullscreen-wrapper');
     
-    // Imposta la sorgente sul nostro stream di rete nativo
+    // Inizializzazione pulita
     audio.src = `/stream/${genreName}`;
+    playBtn.innerText = "PLAY";
+    document.getElementById('now-playing-title').innerText = "Calcolo in corso...";
+    document.getElementById('now-playing-time').innerText = "00:00 / 00:00";
+    
+    // Avvia il polling periodico
+    startNowPlayingPolling(genreName);
 
-    let audioCtx, analyser, source;
+    // Gestione dello Schermo Intero nativo del wrapper
+    fullscreenBtn.onclick = () => {
+        if (!document.fullscreenElement) {
+            fullscreenWrapper.requestFullscreen().catch(err => {
+                console.error(`Errore Fullscreen: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
+    // Inizializza audioMotion una sola volta per non creare duplicati
+    if (!audioMotion) {
+        audioMotion = new AudioMotionAnalyzer(
+            document.getElementById('visualizer-container'),
+            {
+                source: audio,
+                height: 350,
+                ansiColors: true,
+                mode: 5, // Spettrometro ad alta risoluzione
+                barSpace: 2,
+                ledFormat: 'row',
+                showScaleX: false,
+                showScaleY: false,
+                showPeaks: true,
+                overlay: true,
+                bgAlpha: 0,
+                gradient: 'prism' // Gradiente super vibrante e premium
+            }
+        );
+    }
 
     playBtn.onclick = () => {
-        if (!audioCtx) {
-            // Inizializza l'AudioContext del browser al primo click (obbligatorio per policy)
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioCtx.createAnalyser();
-            source = audioCtx.createMediaElementSource(audio);
-            
-            source.connect(analyser);
-            analyser.connect(audioCtx.destination);
-            
-            analyser.fftSize = 64; // Numero di barre del visualizer (basso = leggero)
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-
-            // Funzione di disegno loop del visualizer spettrometro
-            function draw() {
-                requestAnimationFrame(draw);
-                analyser.getByteFrequencyData(dataArray);
-
-                ctx.fillStyle = '#141419';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                const barWidth = (canvas.width / bufferLength) * 1.5;
-                let barHeight;
-                let x = 0;
-
-                for (let i = 0; i < bufferLength; i++) {
-                    barHeight = dataArray[i] / 1.5;
-                    ctx.fillStyle = `rgb(${barHeight + 100}, 0, 127)`;
-                    ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-                    x += barWidth + 2;
-                }
-            }
-            draw();
-        }
-
         if (audio.paused) {
-            // Ricarica lo stream per agganciarsi al momento "esatto" della diretta ed evitare buffering accumulati
-            audio.load(); 
-            audio.play();
-            playBtn.innerText = "ZITTO";
+            // Ricarica la sorgente audio live per essere in sincrono immediato ed evitare ritardi
+            audio.load();
+            audio.play().then(() => {
+                // Ripristina o attiva l'AudioContext dell'analyzer se necessario
+                if (audioMotion && audioMotion.audioCtx) {
+                    audioMotion.audioCtx.resume();
+                }
+            });
+            playBtn.innerText = "PAUSE";
         } else {
             audio.pause();
-            playBtn.innerText = "ENTRA NEL FLUSSO";
+            playBtn.innerText = "PLAY";
         }
     };
 }

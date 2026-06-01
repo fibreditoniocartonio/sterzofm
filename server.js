@@ -92,6 +92,13 @@ class RadioStation {
         
         // Rileva il bitrate dinamico dell'MP3
         const bitrate = getMp3Bitrate(filePath);
+
+        // Tracciamento canzone corrente per l'API now-playing
+        this.currentTrack = randomFile;
+        this.trackStartedAt = Date.now();
+        const fileSize = fs.statSync(filePath).size;
+        // durata stimata: dimensione / (bitrate kbps → byte/s)
+        this.trackDuration = Math.round(fileSize / ((bitrate * 1000) / 8));
         
         const fd = fs.openSync(filePath, 'r');
         let offset = 0;
@@ -158,6 +165,27 @@ const server = http.createServer((req, res) => {
         const folders = fs.readdirSync(TRACKS_DIR).filter(f => fs.statSync(path.join(TRACKS_DIR, f)).isDirectory());
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(folders));
+    }
+
+    // API per ottenere info sul brano attualmente in riproduzione
+    if (pathname === '/api/now-playing' && req.method === 'GET') {
+        const genre = parsedUrl.searchParams.get('genre');
+        if (!genre) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Specifica un genere' }));
+        }
+        const station = activeStations.get(genre);
+        if (!station || !station.currentTrack) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ track: 'Nessun brano in riproduzione', elapsed: 0, duration: 0 }));
+        }
+        const elapsed = Math.round((Date.now() - station.trackStartedAt) / 1000);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            track: station.currentTrack,
+            elapsed: Math.min(elapsed, station.trackDuration),
+            duration: station.trackDuration
+        }));
     }
 
     // Endpoint di Streaming per Web Player, VLC e MPV (es: /stream/trance)

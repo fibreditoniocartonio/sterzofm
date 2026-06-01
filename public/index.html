@@ -19,13 +19,20 @@
     <div id="player-view" class="view hidden">
         <a href="/" class="back-btn">← Torna alla Home</a>
         <h2 id="current-genre">Genere</h2>
-        <p class="live-indicator">● LIVE TRANSMISSION</p>
         
-        <div class="controls">
-            <button id="play-btn">ENTRA NEL FLUSSO</button>
+        <div class="controls" style="margin-bottom: 20px; display: flex; justify-content: center; gap: 15px;">
+            <button id="play-btn">PLAY</button>
+            <button id="fullscreen-btn" style="background: #333; color: #fff;">SCHERMO INTERO</button>
         </div>
 
-        <canvas id="visualizer"></canvas>
+        <!-- Container che racchiude canzone e visualizer per il fullscreen -->
+        <div id="visualizer-fullscreen-wrapper">
+            <div class="now-playing-container">
+                <span id="now-playing-title">Nessun brano in riproduzione</span>
+                <span id="now-playing-time">00:00 / 00:00</span>
+            </div>
+            <div id="visualizer-container"></div>
+        </div>
         <audio id="radio-audio" crossorigin="anonymous"></audio>
     </div>
 
@@ -68,6 +75,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/audiomotion-analyzer@4"></script>
     <script src="script.js"></script>
 </body>
 </html>

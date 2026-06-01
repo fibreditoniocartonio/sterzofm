@@ -34,3 +34,142 @@ button:hover { background: #e0006c; }
 canvas { width: 100%; height: 150px; background: #141419; margin-top: 20px; border-radius: 5px; }
 .back-btn, .admin-link { color: #888; text-decoration: none; font-size: 0.9rem; }
 .back-btn:hover, .admin-link:hover { color: #fff; }
+
+/* Stili Area Riservata (Admin) */
+.admin-panel {
+    background: #141419;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #222;
+    margin-top: 20px;
+    text-align: left;
+}
+.pin-form, .admin-top-bar {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+.pin-form input, .admin-top-bar input {
+    flex: 1;
+    background: #0f0f13;
+    border: 1px solid #333;
+    color: #fff;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 1rem;
+    border-radius: 5px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.pin-form input:focus, .admin-top-bar input:focus {
+    border-color: #ff007f;
+}
+.pin-form button, .admin-top-bar button {
+    padding: 10px 20px;
+}
+.error-msg {
+    color: #ff3366;
+    font-size: 0.85rem;
+    margin-top: 10px;
+    min-height: 1.2rem;
+}
+.admin-list-container {
+    margin-top: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.admin-genre-box {
+    background: #1c1c24;
+    border: 1px solid #333;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+.admin-genre-header {
+    background: #252530;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+}
+.admin-genre-title {
+    font-weight: bold;
+    color: #ff007f;
+    text-transform: uppercase;
+}
+.delete-genre-btn {
+    background: #aa2222;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    border-radius: 3px;
+}
+.delete-genre-btn:hover {
+    background: #cc3333;
+}
+.admin-genre-body {
+    padding: 15px;
+}
+.upload-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px dashed #333;
+    padding-bottom: 12px;
+}
+.upload-btn-label {
+    background: #333;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: bold;
+    display: inline-block;
+    transition: 0.2s;
+}
+.upload-btn-label:hover {
+    background: #444;
+    border-color: #ff007f;
+}
+.upload-status {
+    font-size: 0.8rem;
+    color: #00ff66;
+}
+.admin-track-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.admin-track-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #222;
+}
+.admin-track-list li:last-child {
+    border-bottom: none;
+}
+.track-name {
+    color: #ccc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80%;
+}
+.delete-track-btn {
+    background: transparent;
+    color: #ff3366;
+    border: none;
+    padding: 2px 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.delete-track-btn:hover {
+    color: #ff0000;
+    background: rgba(255, 0, 0, 0.1);
+    border-radius: 3px;
+}

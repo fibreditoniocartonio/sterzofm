@@ -29,6 +29,34 @@
         <audio id="radio-audio" crossorigin="anonymous"></audio>
     </div>
 
+    <div id="admin-view" class="view hidden">
+        <a href="/" class="back-btn">← Torna alla Home</a>
+        <h2 style="color: #ff007f; margin-top: 20px; letter-spacing: 1px;">CONSOLE DI AMMINISTRAZIONE</h2>
+        
+        <!-- Schermata di Login PIN -->
+        <div id="login-container" class="admin-panel">
+            <p>Inserisci il PIN per sbloccare la console:</p>
+            <div class="pin-form">
+                <input type="password" id="pin-input" placeholder="PIN" maxlength="4" autocomplete="off">
+                <button id="login-btn">SBLOCCA</button>
+            </div>
+            <p id="login-error" class="error-msg"></p>
+        </div>
+
+        <!-- Schermata Principale di Controllo -->
+        <div id="dashboard-container" class="admin-panel hidden">
+            <div class="admin-top-bar">
+                <input type="text" id="new-genre-input" placeholder="Nuovo genere (es: techno)" autocomplete="off">
+                <button id="create-genre-btn">CREA GENERE</button>
+            </div>
+            <p id="genre-error" class="error-msg"></p>
+            
+            <div id="admin-genres-list" class="admin-list-container">
+                <!-- Verrà popolato dinamicamente con i generi e le canzoni -->
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

@@ -9,6 +9,55 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 // Assicurati che la cartella dei brani esista
 if (!fs.existsSync(TRACKS_DIR)) fs.mkdirSync(TRACKS_DIR);
 
+// Analizza l'header del primo frame MP3 per rilevare il bitrate (evita false corrispondenze saltando ID3v2)
+function getMp3Bitrate(filePath) {
+    try {
+        const fd = fs.openSync(filePath, 'r');
+        const headerBuffer = Buffer.alloc(10);
+        fs.readSync(fd, headerBuffer, 0, 10, 0);
+        
+        let startOffset = 0;
+        if (headerBuffer.toString('utf8', 0, 3) === 'ID3') {
+            const size = ((headerBuffer[6] & 0x7F) << 21) |
+                         ((headerBuffer[7] & 0x7F) << 14) |
+                         ((headerBuffer[8] & 0x7F) << 7) |
+                         (headerBuffer[9] & 0x7F);
+            startOffset = size + 10;
+        }
+        
+        const scanBuffer = Buffer.alloc(8192);
+        const bytesRead = fs.readSync(fd, scanBuffer, 0, 8192, startOffset);
+        fs.closeSync(fd);
+        
+        let i = 0;
+        while (i < bytesRead - 4) {
+            if (scanBuffer[i] === 0xFF && (scanBuffer[i+1] & 0xE0) === 0xE0) {
+                const mpegVersion = (scanBuffer[i+1] & 0x18) >> 3;
+                const layer = (scanBuffer[i+1] & 0x06) >> 1;
+                const bitrateIndex = (scanBuffer[i+2] & 0xF0) >> 4;
+                
+                if (layer === 1 && bitrateIndex > 0 && bitrateIndex < 15) {
+                    if (mpegVersion === 3) {
+                        const bitrates = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+                        return bitrates[bitrateIndex];
+                    } else if (mpegVersion === 2 || mpegVersion === 0) {
+                        const bitrates = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+                        return bitrates[bitrateIndex];
+                    }
+                }
+            }
+            i++;
+        }
+    } catch (e) {
+        console.error("Errore nel rilevamento del bitrate MP3:", e);
+    }
+    return 128; // Fallback predefinito
+}
+
+function checkAdminAuth(req) {
+    return req.headers['x-pin'] === '7777';
+}
+
 // Classe per gestire la "Radio" di ogni singolo genere
 class RadioStation {
     constructor(genre) {
@@ -41,12 +90,15 @@ class RadioStation {
         const randomFile = files[Math.floor(Math.random() * files.length)];
         const filePath = path.join(genreDir, randomFile);
         
+        // Rileva il bitrate dinamico dell'MP3
+        const bitrate = getMp3Bitrate(filePath);
+        
         const fd = fs.openSync(filePath, 'r');
         let offset = 0;
         
-        // 128 kbps = 16000 byte al secondo. Spediamo 1600 byte ogni 100ms per massima fluidità.
-        const chunkSize = 1600; 
         const intervalTime = 100;
+        // bitrate (kbps) * 1000 = bits/s. / 8 = bytes/s. * (intervalTime/1000) = bytes per chunk.
+        const chunkSize = Math.round((bitrate * 1000) / 8 * (intervalTime / 1000));
 
         this.loopInterval = setInterval(() => {
             const buffer = Buffer.alloc(chunkSize);
@@ -95,18 +147,22 @@ const activeStations = new Map();
 
 // Creazione del Server HTTP nativo
 const server = http.createServer((req, res) => {
-    const url = req.url;
+    // Analizziamo URL e pathname con l'oggetto standard URL
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const pathname = parsedUrl.pathname;
+
+    // --- API PUBBLICHE / GENERALI ---
 
     // API per ottenere la lista dei generi disponibili (basato sulle cartelle esistenti)
-    if (url === '/api/genres') {
+    if (pathname === '/api/genres' && req.method === 'GET') {
         const folders = fs.readdirSync(TRACKS_DIR).filter(f => fs.statSync(path.join(TRACKS_DIR, f)).isDirectory());
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(folders));
     }
 
     // Endpoint di Streaming per Web Player, VLC e MPV (es: /stream/trance)
-    if (url.startsWith('/stream/')) {
-        const genre = url.split('/')[2];
+    if (pathname.startsWith('/stream/')) {
+        const genre = pathname.split('/')[2];
         const genreDir = path.join(TRACKS_DIR, genre);
 
         if (!fs.existsSync(genreDir) || !fs.statSync(genreDir).isDirectory()) {
@@ -128,17 +184,191 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Servizio File Statici del Frontend
-    let filePath = path.join(PUBLIC_DIR, url === '/' ? 'index.html' : url);
-    
-    // Gestione rotte dinamiche dei generi (es: sterzofm.alwaysdata.net/trance)
-    // Se l'utente digita una rotta che corrisponde a una cartella di un genere, gli serviamo index.html
-    const potentialGenre = url.substring(1);
-    if (!fs.existsSync(filePath) && fs.existsSync(path.join(TRACKS_DIR, potentialGenre))) {
+    // --- API DI AMMINISTRAZIONE (CON VERIFICA PIN) ---
+
+    // Verifica del PIN
+    if (pathname === '/api/admin/verify' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                if (data.pin === '7777') {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ success: true }));
+                } else {
+                    res.writeHead(401, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ success: false, error: 'PIN errato' }));
+                }
+            } catch (e) {
+                res.writeHead(400);
+                return res.end('Bad Request');
+            }
+        });
+        return;
+    }
+
+    // Lista canzoni per ciascun genere (dashboard admin)
+    if (pathname === '/api/admin/tracks' && req.method === 'GET') {
+        if (!checkAdminAuth(req)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Non autorizzato' }));
+        }
+
+        const structure = {};
+        try {
+            const folders = fs.readdirSync(TRACKS_DIR).filter(f => fs.statSync(path.join(TRACKS_DIR, f)).isDirectory());
+            for (const genre of folders) {
+                const genreDir = path.join(TRACKS_DIR, genre);
+                const files = fs.readdirSync(genreDir).filter(f => f.endsWith('.mp3'));
+                structure[genre] = files;
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify(structure));
+        } catch (e) {
+            res.writeHead(500);
+            return res.end('Errore interno del server');
+        }
+    }
+
+    // Creazione nuovo genere
+    if (pathname === '/api/genres' && req.method === 'POST') {
+        if (!checkAdminAuth(req)) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Non autorizzato' }));
+        }
+
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const safeName = data.name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                if (!safeName) {
+                    res.writeHead(400);
+                    return res.end('Nome genere non valido');
+                }
+                const genreDir = path.join(TRACKS_DIR, safeName);
+                if (!fs.existsSync(genreDir)) {
+                    fs.mkdirSync(genreDir);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ success: true }));
+                } else {
+                    res.writeHead(400);
+                    return res.end('Il genere esiste gia');
+                }
+            } catch (e) {
+                res.writeHead(400);
+                return res.end('Bad Request');
+            }
+        });
+        return;
+    }
+
+    // Eliminazione di un genere
+    if (pathname === '/api/genres' && req.method === 'DELETE') {
+        if (!checkAdminAuth(req)) {
+            res.writeHead(401);
+            return res.end('Non autorizzato');
+        }
+        const genre = path.basename(parsedUrl.searchParams.get('genre') || '');
+        if (!genre) {
+            res.writeHead(400);
+            return res.end('Genere mancante');
+        }
+        const genreDir = path.join(TRACKS_DIR, genre);
+        if (fs.existsSync(genreDir) && fs.statSync(genreDir).isDirectory()) {
+            // Ferma la stazione radio attiva del genere per rilasciare i file descriptor
+            if (activeStations.has(genre)) {
+                const station = activeStations.get(genre);
+                if (station.loopInterval) clearInterval(station.loopInterval);
+                for (let client of station.clients) {
+                    client.end();
+                }
+                activeStations.delete(genre);
+            }
+            fs.rmSync(genreDir, { recursive: true, force: true });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: true }));
+        } else {
+            res.writeHead(404);
+            return res.end('Genere non trovato');
+        }
+    }
+
+    // Eliminazione di un brano (traccia)
+    if (pathname === '/api/tracks' && req.method === 'DELETE') {
+        if (!checkAdminAuth(req)) {
+            res.writeHead(401);
+            return res.end('Non autorizzato');
+        }
+        const genre = path.basename(parsedUrl.searchParams.get('genre') || '');
+        const filename = path.basename(parsedUrl.searchParams.get('filename') || '');
+        if (!genre || !filename) {
+            res.writeHead(400);
+            return res.end('Parametri mancanti');
+        }
+        const trackPath = path.join(TRACKS_DIR, genre, filename);
+        if (fs.existsSync(trackPath)) {
+            fs.unlinkSync(trackPath);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ success: true }));
+        } else {
+            res.writeHead(404);
+            return res.end('Traccia non trovata');
+        }
+    }
+
+    // Upload binario di file MP3 (senza multipart parsing pesante!)
+    if (pathname === '/api/upload' && req.method === 'POST') {
+        if (!checkAdminAuth(req)) {
+            res.writeHead(401);
+            return res.end('Non autorizzato');
+        }
+        const genre = path.basename(parsedUrl.searchParams.get('genre') || '');
+        const filename = path.basename(parsedUrl.searchParams.get('filename') || '');
+        if (!genre || !filename || !filename.toLowerCase().endsWith('.mp3')) {
+            res.writeHead(400);
+            return res.end('Parametri non validi');
+        }
+
+        const genreDir = path.join(TRACKS_DIR, genre);
+        if (!fs.existsSync(genreDir) || !fs.statSync(genreDir).isDirectory()) {
+            res.writeHead(404);
+            return res.end('Genere non trovato');
+        }
+
+        const targetPath = path.join(genreDir, filename);
+        const writeStream = fs.createWriteStream(targetPath);
+
+        req.pipe(writeStream);
+
+        writeStream.on('error', (err) => {
+            res.writeHead(500);
+            res.end('Errore durante la scrittura del file');
+        });
+
+        writeStream.on('finish', () => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+        });
+        return;
+    }
+
+    // --- GESTIONE DEI FILE STATICI E DEL ROUTING SPA ---
+
+    let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
+
+    // Se l'utente digita una rotta corrispondente a un genere o /admin, gli serviamo index.html (SPA)
+    const potentialGenre = pathname.substring(1);
+    const isGenreDir = fs.existsSync(path.join(TRACKS_DIR, potentialGenre)) && fs.statSync(path.join(TRACKS_DIR, potentialGenre)).isDirectory();
+    const isAdminRoute = pathname === '/admin';
+
+    if (!fs.existsSync(filePath) && (isGenreDir || isAdminRoute)) {
         filePath = path.join(PUBLIC_DIR, 'index.html');
     }
 
-    // Lettura e invio dei file statici (HTML, CSS, JS)
+    // Lettura dei file statici
     fs.readFile(filePath, (err, data) => {
         if (err) {
             res.writeHead(404);
@@ -148,7 +378,7 @@ const server = http.createServer((req, res) => {
         let contentType = 'text/html';
         if (ext === '.css') contentType = 'text/css';
         if (ext === '.js') contentType = 'application/javascript';
-        
+
         res.writeHead(200, { 'Content-Type': contentType });
         res.end(data);
     });

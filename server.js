@@ -1,6 +1,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { Throttle } = require('throttle');
+const archiver = require('archiver');
+const fsPromises = fs.promises;
 
 const PORT = process.env.PORT || 8100; // Si adatta automaticamente ad Alwaysdata
 const TRACKS_DIR = path.join(__dirname, 'tracks');
@@ -101,6 +104,10 @@ class RadioStation {
     start() {
         if (this.isPlaying) return;
         this.isPlaying = true;
+        // Creiamo un canale di broadcast unico
+        this.broadcast = new require('stream').PassThrough();
+        this.broadcast.setMaxListeners(0); // Evita warning per troppi listener
+        this.sseClients = new Set(); // Per il punto 2 (SSE)
         this.playNext();
     }
 
@@ -113,90 +120,88 @@ class RadioStation {
 
         const files = fs.readdirSync(genreDir).filter(f => f.endsWith('.mp3'));
         if (files.length === 0) {
-            // Se non ci sono canzoni, svuota la coda e aspetta
             this.queue = [];
             setTimeout(() => this.playNext(), 5000);
             return;
         }
 
         const currentDay = new Date().getDate();
-
-        // Controllo di sicurezza: ripulisce la coda se qualche file è stato cancellato via pannello Admin
         this.queue = this.queue.filter(f => files.includes(f));
 
-        // Dobbiamo rimescolare se: la coda è vuota OPPURE è scattata la mezzanotte (giorno cambiato)
         if (this.queue.length === 0 || currentDay !== this.lastPlayedDay) {
             this.reshuffle(files);
             this.lastPlayedDay = currentDay;
-            console.log(`[${this.genre}] Nuovo shuffle generato! Brani in coda: ${this.queue.length}`);
         }
 
-        // Pesca la prima canzone dalla coda e la rimuove dall'array
         const trackToPlay = this.queue.shift();
-
-        // Aggiorna la memoria (history) delle ultime 5 canzoni
         this.history.push(trackToPlay);
-        if (this.history.length > 5) {
-            this.history.shift(); // Rimuove la più vecchia per mantenere l'array a 5
-        }
+        if (this.history.length > 5) this.history.shift();
 
         const filePath = path.join(genreDir, trackToPlay);
+        const bitrate = getMp3Bitrate(filePath); // Usa la tua funzione (es. 128)
 
-        // Rileva il bitrate dinamico dell'MP3
-        const bitrate = getMp3Bitrate(filePath);
-
-        // Tracciamento canzone corrente per l'API now-playing
         this.currentTrack = trackToPlay;
         this.trackStartedAt = Date.now();
         const fileSize = fs.statSync(filePath).size;
-        // durata stimata: dimensione / (bitrate kbps → byte/s)
         this.trackDuration = Math.round(fileSize / ((bitrate * 1000) / 8));
 
-        const fd = fs.openSync(filePath, 'r');
-        let offset = 0;
+        // Invia i metadati a tutti i client connessi via SSE
+        this.broadcastMetadata();
 
-        const intervalTime = 100;
-        const chunkSize = Math.round((bitrate * 1000) / 8 * (intervalTime / 1000));
+        // 1. Legge il file
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.on('error', (err) => {
+            console.error(`[${this.genre}] Errore lettura file (forse eliminato?):`, err.message);
+            this.playNext(); // Salta alla prossima
+        });
+        // 2. Regola la velocità di lettura in base al bitrate (byte al secondo)
+        const throttle = new Throttle((bitrate * 1000) / 8);
 
-        this.loopInterval = setInterval(() => {
-            const buffer = Buffer.alloc(chunkSize);
-            let bytesRead = 0;
+        // Collega (pipe) i pezzi
+        fileStream.pipe(throttle).pipe(this.broadcast, { end: false });
 
-            try {
-                bytesRead = fs.readSync(fd, buffer, 0, chunkSize, offset);
-            } catch (e) {
-                bytesRead = 0;
-            }
+        throttle.on('end', () => {
+            this.playNext(); // Quando finisce, passa alla prossima
+        });
 
-            if (bytesRead === 0) {
-                clearInterval(this.loopInterval);
-                fs.closeSync(fd);
-                this.playNext(); // Passa alla prossima canzone (che verrà pescata dalla coda)
-                return;
-            }
-
-            offset += bytesRead;
-            const dataChunk = buffer.subarray(0, bytesRead);
-
-            // Invia il blocco audio a tutti i client
-            for (let client of this.clients) {
-                client.write(dataChunk);
-            }
-        }, intervalTime);
+        throttle.on('error', (err) => {
+            console.error("Errore stream:", err);
+            this.playNext();
+        });
     }
 
-    addClient(res) {
+    addClient(req, res) {
         res.writeHead(200, {
             'Content-Type': 'audio/mpeg',
             'Transfer-Encoding': 'chunked',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache, no-store, must-revalidate'
+            'Connection': 'keep-alive'
         });
+
+        // Collega il client al canale di broadcast
+        this.broadcast.pipe(res);
         this.clients.add(res);
+
+        // Pulizia Memoria (Memory Leaks)
+        const cleanup = () => {
+            this.broadcast.unpipe(res);
+            this.clients.delete(res);
+            res.end();
+        };
+
+        req.on('close', cleanup);
+        res.on('error', cleanup);
     }
 
-    removeClient(res) {
-        this.clients.delete(res);
+    broadcastMetadata() {
+        if (!this.sseClients) return;
+        const data = JSON.stringify({
+            track: this.currentTrack,
+            duration: this.trackDuration,
+            elapsed: 0 // Il client calcolerà l'avanzamento
+        });
+        for (let res of this.sseClients) {
+            res.write(`data: ${data}\n\n`);
+        }
     }
 }
 
@@ -222,21 +227,33 @@ const server = http.createServer((req, res) => {
     if (pathname === '/api/now-playing' && req.method === 'GET') {
         const genre = parsedUrl.searchParams.get('genre');
         if (!genre) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Specifica un genere' }));
+            res.writeHead(400);
+            return res.end();
         }
-        const station = activeStations.get(genre);
-        if (!station || !station.currentTrack) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ track: 'Nessun brano in riproduzione', elapsed: 0, duration: 0 }));
+
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+        });
+
+        let station = activeStations.get(genre);
+        if (!station) {
+            station = new RadioStation(genre);
+            activeStations.set(genre, station);
         }
-        const elapsed = Math.round((Date.now() - station.trackStartedAt) / 1000);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({
-            track: station.currentTrack,
-            elapsed: Math.min(elapsed, station.trackDuration),
-            duration: station.trackDuration
-        }));
+
+        if (!station.sseClients) station.sseClients = new Set();
+        station.sseClients.add(res);
+
+        // Invia subito lo stato attuale al client appena connesso
+        const elapsed = station.trackStartedAt ? Math.round((Date.now() - station.trackStartedAt) / 1000) : 0;
+        res.write(`data: ${JSON.stringify({ track: station.currentTrack || 'Nessun brano', duration: station.trackDuration || 0, elapsed })}\n\n`);
+
+        req.on('close', () => {
+            station.sseClients.delete(res);
+        });
+        return;
     }
 
     // Endpoint di Streaming per Web Player, VLC e MPV (es: /stream/trance)
@@ -255,11 +272,7 @@ const server = http.createServer((req, res) => {
 
         const station = activeStations.get(genre);
         station.start();
-        station.addClient(res);
-
-        req.on('close', () => {
-            station.removeClient(res);
-        });
+        station.addClient(req, res);
         return;
     }
 
@@ -302,42 +315,24 @@ const server = http.createServer((req, res) => {
             return res.end('Non autorizzato');
         }
         const genre = path.basename(parsedUrl.searchParams.get('genre') || '');
-        if (!genre) {
-            res.writeHead(400);
-            return res.end('Genere mancante');
-        }
         const genreDir = path.join(TRACKS_DIR, genre);
-        if (fs.existsSync(genreDir) && fs.statSync(genreDir).isDirectory()) {
-            const isWin = process.platform === 'win32';
-            const cmd = isWin ? 'tar' : 'zip';
-            // Su Windows tar comprime, su Linux zip comprime. Useremo '.' in entrambi per evitare wildcards.
-            const args = isWin ? ['-cf', '-', '.'] : ['-r', '-', '.'];
-            const contentType = isWin ? 'application/x-tar' : 'application/zip';
-            const ext = isWin ? 'tar' : 'zip';
 
+        if (fs.existsSync(genreDir)) {
             res.writeHead(200, {
-                'Content-Type': contentType,
-                'Content-Disposition': `attachment; filename="${genre}.${ext}"`
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${genre}.zip"`
             });
 
-            const { spawn } = require('child_process');
-            const packer = spawn(cmd, args, { cwd: genreDir });
+            const archive = archiver('zip', { zlib: { level: 5 } }); // Compressione media, non blocca la CPU
 
-            packer.stdout.pipe(res);
-
-            packer.stderr.on('data', (data) => {
-                console.error(`Errore di compressione: ${data}`);
+            archive.on('error', (err) => {
+                res.status(500).send({ error: err.message });
             });
 
-            packer.on('close', (code) => {
-                if (code !== 0) {
-                    console.error(`Packer chiuso con codice ${code}`);
-                }
-            });
-
-            req.on('close', () => {
-                packer.kill();
-            });
+            // Connette l'output di archiver direttamente alla risposta HTTP
+            archive.pipe(res);
+            archive.directory(genreDir, false);
+            archive.finalize();
         } else {
             res.writeHead(404);
             return res.end('Genere non trovato');
@@ -374,32 +369,46 @@ const server = http.createServer((req, res) => {
             return res.end(JSON.stringify({ error: 'Non autorizzato' }));
         }
 
-        const genres = [];
-        let totalSize = 0;
-        try {
-            const folders = fs.readdirSync(TRACKS_DIR).filter(f => fs.statSync(path.join(TRACKS_DIR, f)).isDirectory());
-            for (const genreName of folders) {
-                const genreDir = path.join(TRACKS_DIR, genreName);
-                const files = fs.readdirSync(genreDir).filter(f => f.endsWith('.mp3'));
+        (async () => {
+            try {
+                const genres = [];
+                let totalSize = 0;
 
-                const tracks = [];
-                let genreSize = 0;
-                for (const file of files) {
-                    const filePath = path.join(genreDir, file);
-                    const stat = fs.statSync(filePath);
-                    tracks.push({ name: file, size: stat.size });
-                    genreSize += stat.size;
+                // Usiamo fsPromises invece di fs
+                const items = await fsPromises.readdir(TRACKS_DIR, { withFileTypes: true });
+                const folders = items.filter(dirent => dirent.isDirectory()).map(dirent => dirent.name);
+
+                for (const genreName of folders) {
+                    const genreDir = path.join(TRACKS_DIR, genreName);
+                    const files = await fsPromises.readdir(genreDir);
+                    const mp3Files = files.filter(f => f.endsWith('.mp3'));
+
+                    const tracks = [];
+                    let genreSize = 0;
+
+                    // Promise.all velocizza la lettura dei file in parallelo
+                    const statPromises = mp3Files.map(async (file) => {
+                        const filePath = path.join(genreDir, file);
+                        const stat = await fsPromises.stat(filePath);
+                        return { name: file, size: stat.size };
+                    });
+
+                    const resolvedTracks = await Promise.all(statPromises);
+                    resolvedTracks.forEach(t => genreSize += t.size);
+
+                    genres.push({ name: genreName, size: genreSize, tracks: resolvedTracks });
+                    totalSize += genreSize;
                 }
 
-                genres.push({ name: genreName, size: genreSize, tracks });
-                totalSize += genreSize;
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ genres, totalSize }));
+            } catch (e) {
+                console.error(e);
+                res.writeHead(500);
+                res.end('Errore interno del server');
             }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ genres, totalSize }));
-        } catch (e) {
-            res.writeHead(500);
-            return res.end('Errore interno del server');
-        }
+        })();
+        return;
     }
 
     // Creazione nuovo genere
@@ -452,9 +461,16 @@ const server = http.createServer((req, res) => {
             // Ferma la stazione radio attiva del genere per rilasciare i file descriptor
             if (activeStations.has(genre)) {
                 const station = activeStations.get(genre);
-                if (station.loopInterval) clearInterval(station.loopInterval);
+                // Chiude lo stream audio principale
+                if (station.broadcast) station.broadcast.end();
                 for (let client of station.clients) {
                     client.end();
+                }
+                // Chiude le connessioni dei metadati (SSE)
+                if (station.sseClients) {
+                    for (let sseClient of station.sseClients) {
+                        sseClient.end();
+                    }
                 }
                 activeStations.delete(genre);
             }

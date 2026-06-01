@@ -16,6 +16,9 @@ const adminGenresList = document.getElementById('admin-genres-list');
 let nowPlayingInterval = null;
 let audioMotion = null;
 let trackHistory = [];
+let eventSource = null;
+let currentTrackDuration = 0;
+let currentTrackElapsed = 0;
 
 // 1. GESTIONE ROUTING CLIENT-SIDE (UNIFICATO)
 function route() {
@@ -475,94 +478,54 @@ document.addEventListener('fullscreenchange', adjustMarquee);
 // 3. LOGICA PLAYER AUDIO + VISUALIZER CON AUDIOMOTION (SOLO WEB CLIENT)
 
 function startNowPlayingPolling(genreName) {
-    if (nowPlayingInterval) clearInterval(nowPlayingInterval);
-    trackHistory = []; // Reset history on new genre
+    stopNowPlayingPolling(); // Pulisce connessioni precedenti
 
-    async function tick() {
-        try {
-            const res = await fetch(`/api/now-playing?genre=${encodeURIComponent(genreName)}`);
-            if (res.ok) {
-                const data = await res.json();
-                const audio = document.getElementById('radio-audio');
+    // Connessione in tempo reale, zero overhead
+    eventSource = new EventSource(`/api/now-playing?genre=${encodeURIComponent(genreName)}`);
 
-                let endBuf = 0;
-                if (audio && audio.buffered && audio.buffered.length > 0) {
-                    endBuf = audio.buffered.end(audio.buffered.length - 1);
-                }
+    eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
 
-                // Calcoliamo l'offset tra il tempo del server e il buffer del client
-                let currentSyncOffset = data.elapsed - endBuf;
+        currentTrackDuration = data.duration;
+        currentTrackElapsed = data.elapsed; // Ricevuto solo al primo avvio o al cambio traccia
 
-                let lastHistory = trackHistory[trackHistory.length - 1];
-                if (!lastHistory || lastHistory.track !== data.track) {
-                    trackHistory.push({
-                        track: data.track,
-                        duration: data.duration,
-                        syncOffset: currentSyncOffset
-                    });
-                } else {
-                    // Smoothing dell'offset per assorbire i micro-scatti di rete
-                    lastHistory.syncOffset = (lastHistory.syncOffset * 0.9) + (currentSyncOffset * 0.1);
-                    lastHistory.duration = data.duration;
-                }
+        const cleanTitle = data.track ? data.track.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
+        const title = document.getElementById('now-playing-title');
 
-                // Troviamo quale brano stiamo effettivamente ascoltando
-                let activeTrack = trackHistory[0];
-                let activeElapsed = 0;
-
-                for (let i = trackHistory.length - 1; i >= 0; i--) {
-                    let th = trackHistory[i];
-                    let trackElapsed = (audio ? audio.currentTime : 0) + th.syncOffset;
-                    if (trackElapsed >= 0) {
-                        activeTrack = th;
-                        activeElapsed = trackElapsed;
-                        break;
-                    }
-                }
-
-                if (!activeTrack && trackHistory.length > 0) {
-                    activeTrack = trackHistory[0];
-                    activeElapsed = 0;
-                }
-                if (activeElapsed < 0) activeElapsed = 0;
-
-                // Rimuovi vecchi brani per non riempire la memoria
-                if (trackHistory.length > 3) trackHistory.shift();
-
-                const displayTrack = activeTrack ? activeTrack.track : data.track;
-                const displayDuration = activeTrack ? activeTrack.duration : data.duration;
-                let displayElapsed = activeTrack ? Math.round(activeElapsed) : data.elapsed;
-                if (displayElapsed > displayDuration && displayDuration > 0) displayElapsed = displayDuration;
-
-                const elapsedMin = Math.floor(displayElapsed / 60).toString().padStart(2, '0');
-                const elapsedSec = (displayElapsed % 60).toString().padStart(2, '0');
-                const durationMin = Math.floor(displayDuration / 60).toString().padStart(2, '0');
-                const durationSec = (displayDuration % 60).toString().padStart(2, '0');
-
-                const cleanTitle = displayTrack ? displayTrack.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
-
-                const title = document.getElementById('now-playing-title');
-                
-                // Aggiorna il testo se cambiato e gestisci il marquee se troppo lungo
-                if (title && title.innerText !== cleanTitle) {
-                    title.innerText = cleanTitle;
-                    // Diamo tempo al DOM di ricalcolare la larghezza prima del check
-                    setTimeout(adjustMarquee, 50);
-                }
-
-                const timeElem = document.getElementById('now-playing-time');
-                if (timeElem) timeElem.innerText = `${elapsedMin}:${elapsedSec} / ${durationMin}:${durationSec}`;
-            }
-        } catch (e) {
-            console.error("Errore nel recupero now-playing:", e);
+        if (title && title.innerText !== cleanTitle) {
+            title.innerText = cleanTitle;
+            setTimeout(adjustMarquee, 50);
         }
-    }
+    };
 
-    tick(); // Esegui subito al caricamento
-    nowPlayingInterval = setInterval(tick, 1000);
+    eventSource.onerror = () => {
+        console.error("Connessione SSE persa, tento il riavvio...");
+    };
+
+    // Il timer locale aggiorna solo la UI (nessuna chiamata HTTP!)
+    nowPlayingInterval = setInterval(() => {
+        if (currentTrackDuration > 0 && currentTrackElapsed < currentTrackDuration) {
+            currentTrackElapsed++;
+        }
+        updateTimeUI(currentTrackElapsed, currentTrackDuration);
+    }, 1000);
+}
+
+function updateTimeUI(elapsed, duration) {
+    const elapsedMin = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const elapsedSec = (elapsed % 60).toString().padStart(2, '0');
+    const durationMin = Math.floor(duration / 60).toString().padStart(2, '0');
+    const durationSec = (duration % 60).toString().padStart(2, '0');
+
+    const timeElem = document.getElementById('now-playing-time');
+    if (timeElem) timeElem.innerText = `${elapsedMin}:${elapsedSec} / ${durationMin}:${durationSec}`;
 }
 
 function stopNowPlayingPolling() {
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
     if (nowPlayingInterval) {
         clearInterval(nowPlayingInterval);
         nowPlayingInterval = null;

@@ -295,16 +295,28 @@ const server = http.createServer((req, res) => {
             return res.end(JSON.stringify({ error: 'Non autorizzato' }));
         }
 
-        const structure = {};
+        const genres = [];
+        let totalSize = 0;
         try {
             const folders = fs.readdirSync(TRACKS_DIR).filter(f => fs.statSync(path.join(TRACKS_DIR, f)).isDirectory());
-            for (const genre of folders) {
-                const genreDir = path.join(TRACKS_DIR, genre);
+            for (const genreName of folders) {
+                const genreDir = path.join(TRACKS_DIR, genreName);
                 const files = fs.readdirSync(genreDir).filter(f => f.endsWith('.mp3'));
-                structure[genre] = files;
+                
+                const tracks = [];
+                let genreSize = 0;
+                for (const file of files) {
+                    const filePath = path.join(genreDir, file);
+                    const stat = fs.statSync(filePath);
+                    tracks.push({ name: file, size: stat.size });
+                    genreSize += stat.size;
+                }
+                
+                genres.push({ name: genreName, size: genreSize, tracks });
+                totalSize += genreSize;
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify(structure));
+            return res.end(JSON.stringify({ genres, totalSize }));
         } catch (e) {
             res.writeHead(500);
             return res.end('Errore interno del server');

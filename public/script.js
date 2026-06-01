@@ -159,15 +159,27 @@ async function loadAdminDashboard() {
 // Rendering Dashboard
 function renderAdminDashboard(data) {
     adminGenresList.innerHTML = '';
-    const genres = Object.keys(data);
+    const genres = data.genres || [];
+    const totalSize = data.totalSize || 0;
+    
+    // Calcolo dello spazio occupato su Alwaysdata (limite 1 GB = 1024 MB)
+    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+    const limitMB = 1024;
+    const percent = Math.min(((totalSize / (1024 * 1024 * 1024)) * 100), 100).toFixed(1);
+    
+    // Aggiorna gli indicatori dello spazio su disco
+    document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB / ${limitMB} MB (${percent}%)`;
+    document.getElementById('space-usage-bar').style.width = `${percent}%`;
     
     if (genres.length === 0) {
         adminGenresList.innerHTML = "<p style='color:#666; padding: 10px;'>Nessun genere creato. Usane uno sopra per cominciare.</p>";
         return;
     }
     
-    genres.forEach(genre => {
-        const tracks = data[genre];
+    genres.forEach(genreObj => {
+        const genre = genreObj.name;
+        const genreSizeMB = (genreObj.size / (1024 * 1024)).toFixed(1);
+        const tracks = genreObj.tracks || [];
         
         const genreBox = document.createElement('div');
         genreBox.className = 'admin-genre-box collapsed'; // Inizia chiuso di default
@@ -183,7 +195,7 @@ function renderAdminDashboard(data) {
         
         const title = document.createElement('span');
         title.className = 'admin-genre-title';
-        title.innerText = `/${genre}`;
+        title.innerText = `/${genre} (${genreSizeMB} MB)`;
         
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'admin-genre-actions';
@@ -247,12 +259,15 @@ function renderAdminDashboard(data) {
             emptyLi.innerHTML = "<span style='color:#555; font-style:italic;'>Nessuna traccia. Carica file MP3.</span>";
             trackList.appendChild(emptyLi);
         } else {
-            tracks.forEach(track => {
+            tracks.forEach(trackObj => {
+                const track = trackObj.name;
+                const trackSizeMB = (trackObj.size / (1024 * 1024)).toFixed(1);
+                
                 const li = document.createElement('li');
                 
                 const trackName = document.createElement('span');
                 trackName.className = 'track-name';
-                trackName.innerText = track;
+                trackName.innerText = `${track} (${trackSizeMB} MB)`;
                 
                 const trackActions = document.createElement('div');
                 trackActions.className = 'track-actions';

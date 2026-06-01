@@ -485,6 +485,39 @@ function setupPlayer(genreName) {
     const audio = document.getElementById('radio-audio');
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const fullscreenWrapper = document.getElementById('visualizer-fullscreen-wrapper');
+    const copyBtn = document.getElementById('copy-stream-btn');
+
+    if (copyBtn) {
+        const copyIcon = copyBtn.querySelector('.copy-icon');
+        const checkIcon = copyBtn.querySelector('.check-icon');
+        if (copyIcon && checkIcon) {
+            copyIcon.classList.remove('hidden');
+            checkIcon.classList.add('hidden');
+            copyBtn.style.borderColor = '';
+            copyBtn.style.color = '';
+        }
+
+        copyBtn.onclick = () => {
+            const streamUrl = `${window.location.origin}/stream/${encodeURIComponent(genreName)}`;
+            navigator.clipboard.writeText(streamUrl).then(() => {
+                if (copyIcon && checkIcon) {
+                    copyIcon.classList.add('hidden');
+                    checkIcon.classList.remove('hidden');
+                    copyBtn.style.borderColor = '#00ff66';
+                    copyBtn.style.color = '#00ff66';
+
+                    setTimeout(() => {
+                        copyIcon.classList.remove('hidden');
+                        checkIcon.classList.add('hidden');
+                        copyBtn.style.borderColor = '';
+                        copyBtn.style.color = '';
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error("Errore durante la copia:", err);
+            });
+        };
+    }
 
     // Imposta la sorgente e resetta i metadati
     audio.src = `/stream/${genreName}`;

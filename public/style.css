@@ -135,6 +135,47 @@ button:active { transform: translateY(1px); }
 .back-btn, .admin-link { color: #888; text-decoration: none; font-size: 0.9rem; }
 .back-btn:hover, .admin-link:hover { color: #fff; }
 
+.genre-title-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+#current-genre {
+    margin: 0;
+    font-size: 2.2rem;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+#copy-stream-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #888;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    line-height: 0;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: auto;
+    height: auto;
+}
+#copy-stream-btn:hover {
+    background: rgba(255, 0, 127, 0.1);
+    border-color: #ff007f;
+    color: #ff007f;
+    transform: scale(1.05);
+}
+#copy-stream-btn:active {
+    transform: scale(0.95);
+}
+
 /* Stili Area Riservata (Admin) */
 .admin-panel {
     background: #141419;

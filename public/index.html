@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SterzoFM</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="home-view" class="view">
+        <h1>SterzoFM</h1>
+        <p>Scegli il tuo genere e sali a bordo:</p>
+        <div id="genres-container"></div>
+        <br>
+        <a href="#admin" class="admin-link">Area Riservata</a>
+    </div>
+
+    <div id="player-view" class="view hidden">
+        <a href="/" class="back-btn">← Torna alla Home</a>
+        <h2 id="current-genre">Genere</h2>
+        <p class="live-indicator">● LIVE TRANSMISSION</p>
+        
+        <div class="controls">
+            <button id="play-btn">ENTRA NEL FLUSSO</button>
+        </div>
+
+        <canvas id="visualizer"></canvas>
+        <audio id="radio-audio" crossorigin="anonymous"></audio>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

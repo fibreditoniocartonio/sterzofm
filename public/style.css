@@ -1,0 +1,36 @@
+body {
+    margin: 0;
+    background: #0f0f13;
+    color: #fff;
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    text-align: center;
+}
+.view { width: 90%; max-width: 500px; padding: 20px; }
+.hidden { display: none !important; }
+h1 { font-size: 3rem; letter-spacing: 2px; color: #ff007f; }
+.genre-card {
+    background: #1c1c24;
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 5px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-weight: bold;
+    border: 1px solid #333;
+    transition: 0.2s;
+}
+.genre-card:hover { border-color: #ff007f; background: #252530; }
+.live-indicator { color: #00ff66; animation: blink 1.5s infinite; font-size: 0.8rem; }
+@keyframes blink { 50% { opacity: 0; } }
+button {
+    background: #ff007f; color: white; border: none; padding: 15px 30px;
+    font-size: 1rem; cursor: pointer; font-family: inherit; font-weight: bold; border-radius: 5px;
+}
+button:hover { background: #e0006c; }
+canvas { width: 100%; height: 150px; background: #141419; margin-top: 20px; border-radius: 5px; }
+.back-btn, .admin-link { color: #888; text-decoration: none; font-size: 0.9rem; }
+.back-btn:hover, .admin-link:hover { color: #fff; }

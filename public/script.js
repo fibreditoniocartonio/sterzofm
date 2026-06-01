@@ -441,6 +441,37 @@ function handleUpload(genre, file, statusSpan) {
     xhr.send(file);
 }
 
+// 2c. GESTIONE DEL TESTO SCORREVOLE (MARQUEE) RESIZE E FULLSCREEN
+function adjustMarquee() {
+    const wrapper = document.getElementById('now-playing-title-wrapper');
+    const title = document.getElementById('now-playing-title');
+    if (!wrapper || !title) return;
+
+    const text = title.innerText;
+    if (text === "Connessione in corso..." || text === "Nessun brano in riproduzione") {
+        title.classList.remove('scrolling-text');
+        title.style.removeProperty('--overflow');
+        return;
+    }
+
+    // Rimuovi temporaneamente la classe per misurare le dimensioni reali
+    title.classList.remove('scrolling-text');
+    title.style.removeProperty('--overflow');
+
+    const scrollWidth = title.scrollWidth;
+    const clientWidth = wrapper.clientWidth;
+
+    if (scrollWidth > clientWidth) {
+        const overflow = scrollWidth - clientWidth;
+        title.style.setProperty('--overflow', `-${overflow + 20}px`);
+        title.classList.add('scrolling-text');
+    }
+}
+
+// Ricalcolo del marquee al resize della finestra o al cambio di fullscreen
+window.addEventListener('resize', adjustMarquee);
+document.addEventListener('fullscreenchange', adjustMarquee);
+
 // 3. LOGICA PLAYER AUDIO + VISUALIZER CON AUDIOMOTION (SOLO WEB CLIENT)
 
 function startNowPlayingPolling(genreName) {
@@ -510,23 +541,13 @@ function startNowPlayingPolling(genreName) {
 
                 const cleanTitle = displayTrack ? displayTrack.replace(/\.[^/.]+$/, "") : 'Nessun brano in riproduzione';
 
-                const wrapper = document.getElementById('now-playing-title-wrapper');
                 const title = document.getElementById('now-playing-title');
                 
                 // Aggiorna il testo se cambiato e gestisci il marquee se troppo lungo
                 if (title && title.innerText !== cleanTitle) {
                     title.innerText = cleanTitle;
-                    title.classList.remove('scrolling-text');
-                    title.style.removeProperty('--overflow');
-                    
-                    // Diamo tempo al DOM di ricalcolare la larghezza
-                    setTimeout(() => {
-                        if (wrapper && title.scrollWidth > wrapper.clientWidth) {
-                            const overflow = title.scrollWidth - wrapper.clientWidth;
-                            title.style.setProperty('--overflow', `-${overflow + 20}px`);
-                            title.classList.add('scrolling-text');
-                        }
-                    }, 50);
+                    // Diamo tempo al DOM di ricalcolare la larghezza prima del check
+                    setTimeout(adjustMarquee, 50);
                 }
 
                 const timeElem = document.getElementById('now-playing-time');

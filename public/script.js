@@ -15,6 +15,7 @@ const adminGenresList = document.getElementById('admin-genres-list');
 // Variabili globali player
 let nowPlayingInterval = null;
 let audioMotion = null;
+let trackHistory = [];
 
 // 1. GESTIONE ROUTING CLIENT-SIDE (UNIFICATO)
 function route() {
@@ -441,8 +442,6 @@ function handleUpload(genre, file, statusSpan) {
 }
 
 // 3. LOGICA PLAYER AUDIO + VISUALIZER CON AUDIOMOTION (SOLO WEB CLIENT)
-
-let trackHistory = [];
 
 function startNowPlayingPolling(genreName) {
     if (nowPlayingInterval) clearInterval(nowPlayingInterval);

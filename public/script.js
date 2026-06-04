@@ -222,14 +222,14 @@ function renderAdminDashboard(data) {
 
         const downloadGenreBtn = document.createElement('a');
         downloadGenreBtn.className = 'download-genre-btn';
-        downloadGenreBtn.innerText = 'Scarica Brani';
+        downloadGenreBtn.innerText = 'Download Massivo';
         downloadGenreBtn.href = 'javascript:void(0)';
         downloadGenreBtn.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
             if (tracks.length === 0) return alert("Nessun brano in questo genere.");
             if (!confirm(`Vuoi scaricare i ${tracks.length} brani di "${genre}"? Verranno scaricati in sequenza.`)) return;
-            
+
             let delay = 0;
             tracks.forEach(trackObj => {
                 setTimeout(() => {
@@ -275,7 +275,7 @@ function renderAdminDashboard(data) {
         fileInput.accept = 'audio/mpeg';
         fileInput.multiple = true;
         fileInput.style.display = 'none';
-        fileInput.onchange = (e) => handleMultipleUploads(genre, Array.from(e.target.files), statusSpan);
+        fileInput.onchange = (e) => handleMultipleUploads(genre, Array.from(e.target.files), statusSpan, tracks);
 
         const statusSpan = document.createElement('span');
         statusSpan.className = 'upload-status';
@@ -417,13 +417,17 @@ async function handleDeleteTrack(genre, filename) {
 }
 
 // Upload Multiplo (Con Avanzamento e Gestione Sequenziale)
-async function handleMultipleUploads(genre, files, statusSpan) {
+async function handleMultipleUploads(genre, files, statusSpan, existingTracks = []) {
     if (!files || files.length === 0) return;
-    
-    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.mp3'));
+
+    const existingNames = new Set(existingTracks.map(t => t.name));
+
+    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.mp3') && !existingNames.has(f.name));
+    const skippedCount = files.length - validFiles.length;
+
     if (validFiles.length === 0) {
         statusSpan.style.color = '#ff3366';
-        statusSpan.innerText = "Solo file MP3 ammessi!";
+        statusSpan.innerText = skippedCount > 0 ? "Tutti i file selezionati erano già presenti." : "Solo file MP3 ammessi!";
         return;
     }
 
@@ -432,23 +436,37 @@ async function handleMultipleUploads(genre, files, statusSpan) {
 
     for (let i = 0; i < validFiles.length; i++) {
         const file = validFiles[i];
-        statusSpan.innerText = `Caricamento ${i+1}/${validFiles.length}: ${file.name} (0%)`;
-        
-        try {
-            await uploadSingleFile(genre, file, (percent) => {
-                statusSpan.innerText = `Caricamento ${i+1}/${validFiles.length}: ${file.name} (${percent}%)`;
-            });
-            successCount++;
-        } catch (e) {
-            console.error(`Errore caricamento ${file.name}`, e);
-            statusSpan.style.color = '#ff3366';
-            statusSpan.innerText = `Errore su ${file.name}. Continuo...`;
-            await new Promise(r => setTimeout(r, 2000));
-            statusSpan.style.color = '#00ff66';
+
+        let attempts = 0;
+        let success = false;
+
+        while (attempts < 3 && !success) {
+            statusSpan.innerText = `Caricamento ${i + 1}/${validFiles.length}: ${file.name} ${attempts > 0 ? `(Tentativo ${attempts + 1}/3)` : '(0%)'}`;
+            try {
+                await uploadSingleFile(genre, file, (percent) => {
+                    statusSpan.innerText = `Caricamento ${i + 1}/${validFiles.length}: ${file.name} (${percent}%)`;
+                });
+                successCount++;
+                success = true;
+            } catch (e) {
+                attempts++;
+                console.error(`Errore caricamento ${file.name} (Tentativo ${attempts})`, e);
+                if (attempts < 3) {
+                    statusSpan.style.color = '#ffaa00';
+                    statusSpan.innerText = `Errore su ${file.name}. Riprovo tra poco...`;
+                    await new Promise(r => setTimeout(r, 3000));
+                    statusSpan.style.color = '#00ff66';
+                } else {
+                    statusSpan.style.color = '#ff3366';
+                    statusSpan.innerText = `Fallito ${file.name}. Continuo col prossimo...`;
+                    await new Promise(r => setTimeout(r, 2000));
+                    statusSpan.style.color = '#00ff66';
+                }
+            }
         }
     }
 
-    statusSpan.innerText = `${successCount} file caricati con successo!`;
+    statusSpan.innerText = `${successCount} caricati` + (skippedCount > 0 ? `, ${skippedCount} saltati (già presenti)!` : ` con successo!`);
     setTimeout(() => {
         loadAdminDashboard();
     }, 1500);
@@ -587,7 +605,7 @@ function setupPlayer(genreName) {
 
         copyBtn.onclick = () => {
             const streamUrl = `${window.location.origin}/stream/${encodeURIComponent(genreName)}`;
-            
+
             const handleSuccess = () => {
                 if (copyIcon && checkIcon) {
                     copyIcon.classList.add('hidden');

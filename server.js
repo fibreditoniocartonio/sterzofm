@@ -11,10 +11,27 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const DB_PATH = path.join(__dirname, 'database.json');
 
 // Telegram Configuration
-const TG_TOKEN = '8649813569:AAGgrKvpvmiotJIWjq5X6rQ8olTzpeNCnZ4';
-const TG_CHAT_ID = '-1003923364284';
-const TG_API = `https://api.telegram.org/bot${TG_TOKEN}`;
-const TG_FILE_API = `https://api.telegram.org/file/bot${TG_TOKEN}`;
+let TG_TOKEN = '';
+let TG_CHAT_ID = '';
+let TG_API = '';
+let TG_FILE_API = '';
+
+const CREDENTIALS_PATH = path.join(__dirname, 'telegram_credentials.txt');
+
+if (fs.existsSync(CREDENTIALS_PATH)) {
+    const lines = fs.readFileSync(CREDENTIALS_PATH, 'utf-8').split(/\r?\n/);
+    lines.forEach(line => {
+        if (line.startsWith('TOKEN=')) TG_TOKEN = line.replace('TOKEN=', '').trim();
+        if (line.startsWith('CHAT_ID=')) TG_CHAT_ID = line.replace('CHAT_ID=', '').trim();
+    });
+
+    TG_API = `https://api.telegram.org/bot${TG_TOKEN}`;
+    TG_FILE_API = `https://api.telegram.org/file/bot${TG_TOKEN}`;
+} else {
+    console.error("ERRORE: File telegram_credentials.txt mancante!");
+    console.error("Crealo nella cartella root con le righe TOKEN=... e CHAT_ID=...");
+    process.exit(1);
+}
 
 let db = { genres: {}, totalSize: 0 };
 if (fs.existsSync(DB_PATH)) {
@@ -80,7 +97,7 @@ class RadioStation {
             const j = Math.floor(Math.random() * (i + 1));
             [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
-        
+
         if (shuffled.length >= 10 && this.history.length > 0) {
             for (let i = 0; i < 5; i++) {
                 if (this.history.find(h => h.file_id === shuffled[i].file_id)) {
@@ -132,7 +149,7 @@ class RadioStation {
 
         try {
             const fileUrl = await getTgFileUrl(trackToPlay.file_id);
-            
+
             https.get(fileUrl, (response) => {
                 if (response.statusCode !== 200) {
                     console.error(`[${this.genre}] HTTP ${response.statusCode} file da TG`);
@@ -251,10 +268,10 @@ const server = http.createServer((req, res) => {
     if (pathname === '/api/tracks/download' && req.method === 'GET') {
         const pin = parsedUrl.searchParams.get('pin');
         if (pin !== '7777') { res.writeHead(401); return res.end('Non autorizzato'); }
-        
+
         const genre = parsedUrl.searchParams.get('genre');
         const filename = parsedUrl.searchParams.get('filename');
-        
+
         const track = (db.genres[genre] || []).find(t => t.name === filename);
         if (!track) { res.writeHead(404); return res.end('File non trovato in DB'); }
 
@@ -325,7 +342,7 @@ const server = http.createServer((req, res) => {
                 const safeName = data.name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
                 if (!safeName) { res.writeHead(400); return res.end('Nome non valido'); }
                 if (db.genres[safeName]) { res.writeHead(400); return res.end('Esiste gia'); }
-                
+
                 db.genres[safeName] = [];
                 saveDb();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -361,13 +378,13 @@ const server = http.createServer((req, res) => {
         if (!checkAdminAuth(req)) { res.writeHead(401); return res.end(); }
         const genre = parsedUrl.searchParams.get('genre');
         const filename = parsedUrl.searchParams.get('filename');
-        
+
         if (db.genres[genre]) {
             const index = db.genres[genre].findIndex(t => t.name === filename);
             if (index !== -1) {
                 const track = db.genres[genre][index];
-                tgApiCall('deleteMessage', { chat_id: TG_CHAT_ID, message_id: track.message_id }).catch(() => {});
-                
+                tgApiCall('deleteMessage', { chat_id: TG_CHAT_ID, message_id: track.message_id }).catch(() => { });
+
                 db.genres[genre].splice(index, 1);
                 saveDb();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -379,7 +396,7 @@ const server = http.createServer((req, res) => {
 
     if (pathname === '/api/upload' && req.method === 'POST') {
         if (!checkAdminAuth(req)) { res.writeHead(401); return res.end(); }
-        
+
         const genre = parsedUrl.searchParams.get('genre');
         const filename = parsedUrl.searchParams.get('filename');
         if (!genre || !db.genres[genre] || !filename || !filename.toLowerCase().endsWith('.mp3')) {
@@ -400,14 +417,14 @@ const server = http.createServer((req, res) => {
                 `-F "chat_id=${TG_CHAT_ID}" ` +
                 `-F "audio=@${tempPath}" ` +
                 `-F "caption=#${genre}"`;
-                
+
             exec(curlCmd, (error, stdout, stderr) => {
-                fs.unlink(tempPath, () => {}); // Elimina file temporaneo
+                fs.unlink(tempPath, () => { }); // Elimina file temporaneo
 
                 if (error) {
                     res.writeHead(500); return res.end('Errore curl upload');
                 }
-                
+
                 try {
                     const tgRes = JSON.parse(stdout);
                     if (tgRes.ok && tgRes.result.audio) {
@@ -433,7 +450,7 @@ const server = http.createServer((req, res) => {
                     } else {
                         res.writeHead(500); return res.end('Telegram error: ' + (tgRes.description || 'Unknown'));
                     }
-                } catch(e) {
+                } catch (e) {
                     res.writeHead(500); return res.end('Errore parse JSON telegram');
                 }
             });

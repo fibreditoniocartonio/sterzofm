@@ -21,6 +21,16 @@ let eventSource = null;
 let currentTrackDuration = 0;
 let currentTrackElapsed = 0;
 
+// Formatta i byte in MB o GB in modo leggibile
+function formatSize(bytes) {
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1024) {
+        const gb = mb / 1024;
+        return Number.isInteger(gb) ? `${gb} GB` : `${gb.toFixed(2)} GB`;
+    }
+    return `${mb.toFixed(1)} MB`;
+}
+
 // 1. GESTIONE ROUTING CLIENT-SIDE (UNIFICATO)
 function route() {
     const path = window.location.pathname;
@@ -182,8 +192,8 @@ function renderAdminDashboard(data) {
     adminGenresList.innerHTML = '';
     const genres = data.genres || [];
     const totalSize = data.totalSize || 0;
-    const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
-    document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB`;
+    const totalTrackCount = data.totalTrackCount || 0;
+    document.getElementById('space-usage-text').innerText = `${totalTrackCount} brani — ${formatSize(totalSize)}`;
 
     if (genres.length === 0) {
         adminGenresList.innerHTML = "<p style='color:#666; padding: 10px;'>Nessun genere creato. Usane uno sopra per cominciare.</p>";
@@ -194,7 +204,6 @@ function renderAdminDashboard(data) {
 
     genres.forEach(genreObj => {
         const genre = genreObj.name;
-        const genreSizeMB = (genreObj.size / (1024 * 1024)).toFixed(1);
         const tracks = genreObj.tracks || [];
 
         const genreBox = document.createElement('div');
@@ -216,7 +225,7 @@ function renderAdminDashboard(data) {
 
         const title = document.createElement('span');
         title.className = 'admin-genre-title';
-        title.innerText = `/${genre} (${genreSizeMB} MB)`;
+        title.innerText = `/${genre} (${genreObj.trackCount || tracks.length} brani — ${formatSize(genreObj.size)})`;
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'admin-genre-actions';
@@ -649,8 +658,8 @@ function setupPlayer(genreName) {
         };
     }
 
-    // Imposta la sorgente e resetta i metadati
-    audio.src = `/stream/${genreName}`;
+    // Imposta la sorgente con cache-buster per evitare audio stantio dalla cache del browser
+    audio.src = `/stream/${genreName}?t=${Date.now()}`;
     document.getElementById('now-playing-title').innerText = "Connessione in corso...";
     document.getElementById('now-playing-time').innerText = "00:00 / 00:00";
 

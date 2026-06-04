@@ -185,7 +185,10 @@ class RadioStation {
         res.writeHead(200, {
             'Content-Type': 'audio/mpeg',
             'Transfer-Encoding': 'chunked',
-            'Connection': 'keep-alive'
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         });
         this.broadcast.pipe(res);
         this.clients.add(res);
@@ -328,14 +331,16 @@ const server = http.createServer((req, res) => {
         }
 
         const genres = [];
+        let totalTrackCount = 0;
         for (const [genreName, tracks] of Object.entries(db.genres)) {
             let genreSize = 0;
             tracks.forEach(t => genreSize += t.size);
-            genres.push({ name: genreName, size: genreSize, tracks: tracks });
+            totalTrackCount += tracks.length;
+            genres.push({ name: genreName, size: genreSize, trackCount: tracks.length, tracks: tracks });
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ genres, totalSize: db.totalSize }));
+        res.end(JSON.stringify({ genres, totalSize: db.totalSize, totalTrackCount }));
         return;
     }
 

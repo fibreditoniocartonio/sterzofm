@@ -70,6 +70,8 @@ async function loadGenres() {
         return;
     }
 
+    genres.sort((a, b) => a.localeCompare(b));
+
     genres.forEach(g => {
         const div = document.createElement('div');
         div.className = 'genre-card';
@@ -188,6 +190,8 @@ function renderAdminDashboard(data) {
         return;
     }
 
+    genres.sort((a, b) => a.name.localeCompare(b.name));
+
     genres.forEach(genreObj => {
         const genre = genreObj.name;
         const genreSizeMB = (genreObj.size / (1024 * 1024)).toFixed(1);
@@ -299,6 +303,8 @@ function renderAdminDashboard(data) {
             const heaviestTracks = [...tracks]
                 .sort((a, b) => b.size - a.size)
                 .slice(0, 5);
+
+            tracks.sort((a, b) => a.name.localeCompare(b.name));
 
             tracks.forEach(trackObj => {
                 const track = trackObj.name;

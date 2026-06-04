@@ -5,7 +5,6 @@ const os = require('os');
 const https = require('https');
 const { exec } = require('child_process');
 const Throttle = require('throttle');
-const archiver = require('archiver');
 
 const PORT = process.env.PORT || 8100;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -274,41 +273,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    if (pathname === '/api/genres/download' && req.method === 'GET') {
-        const pin = parsedUrl.searchParams.get('pin');
-        if (pin !== '7777') { res.writeHead(401); return res.end('Non autorizzato'); }
-        
-        const genre = parsedUrl.searchParams.get('genre');
-        const tracks = db.genres[genre];
-        
-        if (!tracks) { res.writeHead(404); return res.end('Genere non trovato'); }
 
-        res.writeHead(200, {
-            'Content-Type': 'application/zip',
-            'Content-Disposition': `attachment; filename="${genre}.zip"`
-        });
-
-        const archive = archiver('zip', { zlib: { level: 5 } });
-        archive.on('error', (err) => res.end());
-        archive.pipe(res);
-
-        (async () => {
-            for (const t of tracks) {
-                try {
-                    const url = await getTgFileUrl(t.file_id);
-                    await new Promise((resolve) => {
-                        https.get(url, (stream) => {
-                            archive.append(stream, { name: t.name });
-                            stream.on('end', resolve);
-                            stream.on('error', resolve);
-                        });
-                    });
-                } catch (e) { console.error("Saltato download", t.name); }
-            }
-            archive.finalize();
-        })();
-        return;
-    }
 
     if (pathname === '/api/admin/verify' && req.method === 'POST') {
         let body = '';

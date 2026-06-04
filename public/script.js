@@ -13,6 +13,7 @@ const genreError = document.getElementById('genre-error');
 const adminGenresList = document.getElementById('admin-genres-list');
 
 // Variabili globali player
+let openGenres = new Set();
 let nowPlayingInterval = null;
 let audioMotion = null;
 let trackHistory = [];
@@ -179,16 +180,8 @@ function renderAdminDashboard(data) {
     adminGenresList.innerHTML = '';
     const genres = data.genres || [];
     const totalSize = data.totalSize || 0;
-
-    // Calcolo dello spazio occupato su Telegram (Illimitato)
     const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
-    const limitMB = '∞';
-    const percent = 0; // O mostrare una barra sempre piena o vuota. Vuota è meglio per spazio illimitato.
-
-    // Aggiorna gli indicatori dello spazio su disco
-    document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB / ∞ MB`;
-    document.getElementById('space-usage-bar').style.width = `100%`;
-    document.getElementById('space-usage-bar').style.backgroundColor = `#00e5ff`; // Colore Telegram-like
+    document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB`;
 
     if (genres.length === 0) {
         adminGenresList.innerHTML = "<p style='color:#666; padding: 10px;'>Nessun genere creato. Usane uno sopra per cominciare.</p>";
@@ -201,7 +194,7 @@ function renderAdminDashboard(data) {
         const tracks = genreObj.tracks || [];
 
         const genreBox = document.createElement('div');
-        genreBox.className = 'admin-genre-box collapsed'; // Inizia chiuso di default
+        genreBox.className = 'admin-genre-box' + (openGenres.has(genre) ? '' : ' collapsed');
 
         // Header
         const header = document.createElement('div');
@@ -210,6 +203,11 @@ function renderAdminDashboard(data) {
             // Evita il toggle se si clicca sui pulsanti o link nell'header
             if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return;
             genreBox.classList.toggle('collapsed');
+            if (genreBox.classList.contains('collapsed')) {
+                openGenres.delete(genre);
+            } else {
+                openGenres.add(genre);
+            }
         };
 
         const title = document.createElement('span');
@@ -224,9 +222,27 @@ function renderAdminDashboard(data) {
 
         const downloadGenreBtn = document.createElement('a');
         downloadGenreBtn.className = 'download-genre-btn';
-        downloadGenreBtn.innerText = 'Scarica ZIP';
-        downloadGenreBtn.href = `/api/genres/download?genre=${encodeURIComponent(genre)}&pin=${encodeURIComponent(getPin())}`;
-        downloadGenreBtn.onclick = (e) => e.stopPropagation(); // Evita il toggle del collasso
+        downloadGenreBtn.innerText = 'Scarica Brani';
+        downloadGenreBtn.href = 'javascript:void(0)';
+        downloadGenreBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (tracks.length === 0) return alert("Nessun brano in questo genere.");
+            if (!confirm(`Vuoi scaricare i ${tracks.length} brani di "${genre}"? Verranno scaricati in sequenza.`)) return;
+            
+            let delay = 0;
+            tracks.forEach(trackObj => {
+                setTimeout(() => {
+                    const a = document.createElement('a');
+                    a.href = `/api/tracks/download?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(trackObj.name)}&pin=${encodeURIComponent(getPin())}`;
+                    a.download = trackObj.name;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }, delay);
+                delay += 500;
+            });
+        };
 
         const delGenreBtn = document.createElement('button');
         delGenreBtn.className = 'delete-genre-btn';
@@ -257,8 +273,9 @@ function renderAdminDashboard(data) {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'audio/mpeg';
+        fileInput.multiple = true;
         fileInput.style.display = 'none';
-        fileInput.onchange = (e) => handleUpload(genre, e.target.files[0], statusSpan);
+        fileInput.onchange = (e) => handleMultipleUploads(genre, Array.from(e.target.files), statusSpan);
 
         const statusSpan = document.createElement('span');
         statusSpan.className = 'upload-status';
@@ -399,50 +416,69 @@ async function handleDeleteTrack(genre, filename) {
     }
 }
 
-// Upload Traccia Binario (Con Avanzamento Percentuale)
-function handleUpload(genre, file, statusSpan) {
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.mp3')) {
+// Upload Multiplo (Con Avanzamento e Gestione Sequenziale)
+async function handleMultipleUploads(genre, files, statusSpan) {
+    if (!files || files.length === 0) return;
+    
+    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.mp3'));
+    if (validFiles.length === 0) {
         statusSpan.style.color = '#ff3366';
         statusSpan.innerText = "Solo file MP3 ammessi!";
         return;
     }
 
+    let successCount = 0;
     statusSpan.style.color = '#00ff66';
-    statusSpan.innerText = "Inizio caricamento...";
 
-    const xhr = new XMLHttpRequest();
-    const url = `/api/upload?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(file.name)}`;
-
-    xhr.open('POST', url, true);
-    xhr.setRequestHeader('X-PIN', getPin());
-    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-
-    xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            statusSpan.innerText = `Caricamento: ${percent}%`;
-        }
-    });
-
-    xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-            statusSpan.innerText = "Caricato con successo!";
-            setTimeout(() => {
-                loadAdminDashboard();
-            }, 1000);
-        } else {
+    for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        statusSpan.innerText = `Caricamento ${i+1}/${validFiles.length}: ${file.name} (0%)`;
+        
+        try {
+            await uploadSingleFile(genre, file, (percent) => {
+                statusSpan.innerText = `Caricamento ${i+1}/${validFiles.length}: ${file.name} (${percent}%)`;
+            });
+            successCount++;
+        } catch (e) {
+            console.error(`Errore caricamento ${file.name}`, e);
             statusSpan.style.color = '#ff3366';
-            statusSpan.innerText = `Errore: ${xhr.statusText || 'fallito'}`;
+            statusSpan.innerText = `Errore su ${file.name}. Continuo...`;
+            await new Promise(r => setTimeout(r, 2000));
+            statusSpan.style.color = '#00ff66';
         }
-    });
+    }
 
-    xhr.addEventListener('error', () => {
-        statusSpan.style.color = '#ff3366';
-        statusSpan.innerText = "Errore di connessione!";
-    });
+    statusSpan.innerText = `${successCount} file caricati con successo!`;
+    setTimeout(() => {
+        loadAdminDashboard();
+    }, 1500);
+}
 
-    xhr.send(file);
+function uploadSingleFile(genre, file, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const url = `/api/upload?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(file.name)}`;
+
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('X-PIN', getPin());
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                onProgress(percent);
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) resolve();
+            else reject(new Error(xhr.statusText));
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+
+        xhr.send(file);
+    });
 }
 
 // 2c. GESTIONE DEL TESTO SCORREVOLE (MARQUEE) RESIZE E FULLSCREEN
@@ -551,7 +587,8 @@ function setupPlayer(genreName) {
 
         copyBtn.onclick = () => {
             const streamUrl = `${window.location.origin}/stream/${encodeURIComponent(genreName)}`;
-            navigator.clipboard.writeText(streamUrl).then(() => {
+            
+            const handleSuccess = () => {
                 if (copyIcon && checkIcon) {
                     copyIcon.classList.add('hidden');
                     checkIcon.classList.remove('hidden');
@@ -565,9 +602,26 @@ function setupPlayer(genreName) {
                         copyBtn.style.color = '';
                     }, 2000);
                 }
-            }).catch(err => {
-                console.error("Errore durante la copia:", err);
-            });
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(streamUrl).then(handleSuccess).catch(err => {
+                    console.error("Errore durante la copia:", err);
+                });
+            } else {
+                // Fallback for environments without secure context
+                const textArea = document.createElement("textarea");
+                textArea.value = streamUrl;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    handleSuccess();
+                } catch (err) {
+                    console.error('Errore fallback copia:', err);
+                }
+                document.body.removeChild(textArea);
+            }
         };
     }
 

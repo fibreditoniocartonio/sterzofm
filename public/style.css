@@ -11,6 +11,19 @@ body {
     text-align: center;
 }
 
+body::-webkit-scrollbar {
+    width: 6px;
+}
+
+body::-webkit-scrollbar-track {
+    background: #141419;
+}
+
+body::-webkit-scrollbar-thumb {
+    background: #ff007f;
+    border-radius: 3px;
+}
+
 .view {
     width: 95%;
     max-width: 1200px;
@@ -406,19 +419,8 @@ button:active {
     margin: 0;
     max-height: 250px;
     overflow-y: auto;
-    padding-right: 8px; /* Spazio per evitare sovrapposizioni con la scrollbar */
-}
-
-/* Scrollbar stilizzata per la track list (opzionale ma bella) */
-.admin-track-list::-webkit-scrollbar {
-    width: 6px;
-}
-.admin-track-list::-webkit-scrollbar-track {
-    background: #141419;
-}
-.admin-track-list::-webkit-scrollbar-thumb {
-    background: #ff007f;
-    border-radius: 3px;
+    padding-right: 8px;
+    /* Spazio per evitare sovrapposizioni con la scrollbar */
 }
 
 .admin-track-list li {

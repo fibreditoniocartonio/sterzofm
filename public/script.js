@@ -180,14 +180,15 @@ function renderAdminDashboard(data) {
     const genres = data.genres || [];
     const totalSize = data.totalSize || 0;
 
-    // Calcolo dello spazio occupato su Alwaysdata (limite 1 GB = 1024 MB)
+    // Calcolo dello spazio occupato su Telegram (Illimitato)
     const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(1);
-    const limitMB = 1024;
-    const percent = Math.min(((totalSize / (1024 * 1024 * 1024)) * 100), 100).toFixed(1);
+    const limitMB = '∞';
+    const percent = 0; // O mostrare una barra sempre piena o vuota. Vuota è meglio per spazio illimitato.
 
     // Aggiorna gli indicatori dello spazio su disco
-    document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB / ${limitMB} MB (${percent}%)`;
-    document.getElementById('space-usage-bar').style.width = `${percent}%`;
+    document.getElementById('space-usage-text').innerText = `${totalSizeMB} MB / ∞ MB`;
+    document.getElementById('space-usage-bar').style.width = `100%`;
+    document.getElementById('space-usage-bar').style.backgroundColor = `#00e5ff`; // Colore Telegram-like
 
     if (genres.length === 0) {
         adminGenresList.innerHTML = "<p style='color:#666; padding: 10px;'>Nessun genere creato. Usane uno sopra per cominciare.</p>";

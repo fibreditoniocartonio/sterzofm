@@ -11,19 +11,6 @@ body {
     text-align: center;
 }
 
-body::-webkit-scrollbar {
-    width: 6px;
-}
-
-body::-webkit-scrollbar-track {
-    background: #141419;
-}
-
-body::-webkit-scrollbar-thumb {
-    background: #ff007f;
-    border-radius: 3px;
-}
-
 .view {
     width: 95%;
     max-width: 1200px;

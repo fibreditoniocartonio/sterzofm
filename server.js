@@ -233,7 +233,8 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no' // Prevents Nginx/HAProxy from buffering SSE
         });
 
         let station = activeStations.get(genre);
@@ -247,7 +248,15 @@ const server = http.createServer((req, res) => {
         const elapsed = station.trackStartedAt ? Math.round((Date.now() - station.trackStartedAt) / 1000) : 0;
         res.write(`data: ${JSON.stringify({ track: station.currentTrack || 'Nessun brano', duration: station.trackDuration || 0, elapsed })}\n\n`);
 
-        req.on('close', () => station.sseClients.delete(res));
+        // Send a ping every 15s to keep the connection alive
+        const keepAlive = setInterval(() => {
+            res.write(': keepalive\n\n');
+        }, 15000);
+
+        req.on('close', () => {
+            clearInterval(keepAlive);
+            station.sseClients.delete(res);
+        });
         return;
     }
 

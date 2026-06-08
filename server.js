@@ -89,6 +89,8 @@ class RadioStation {
         this.queue = [];
         this.history = [];
         this.lastPlayedDay = new Date().getDate();
+        this.currentResponse = null;
+        this.currentThrottle = null;
     }
 
     reshuffle(tracks) {
@@ -123,6 +125,17 @@ class RadioStation {
     }
 
     async playNext() {
+        // Cleanup degli stream della canzone precedente per evitare mixing
+        if (this.currentThrottle) {
+            this.currentThrottle.removeAllListeners();
+            this.currentThrottle.destroy();
+            this.currentThrottle = null;
+        }
+        if (this.currentResponse) {
+            this.currentResponse.destroy();
+            this.currentResponse = null;
+        }
+
         const genreTracks = db.genres[this.genre] || [];
         if (genreTracks.length === 0) {
             this.isPlaying = false;
@@ -156,19 +169,42 @@ class RadioStation {
                     return this.playNext();
                 }
 
-                const byteRate = Math.max(1, Math.round(trackToPlay.size / this.trackDuration));
+                // Salva il riferimento al response HTTP per il cleanup
+                this.currentResponse = response;
+
+                // Calcolo byteRate con clamp per evitare valori assurdi
+                // 128kbps = 16000 bytes/sec (default ragionevole per MP3)
+                const DEFAULT_BYTE_RATE = 16000;
+                let byteRate;
+                if (this.trackDuration > 0 && trackToPlay.size > 0) {
+                    byteRate = Math.round(trackToPlay.size / this.trackDuration);
+                    // Clamp tra ~8kbps e ~320kbps per evitare drift estremo
+                    byteRate = Math.max(1000, Math.min(byteRate, 40000));
+                } else {
+                    byteRate = DEFAULT_BYTE_RATE;
+                }
+
                 const throttle = new Throttle(byteRate);
+                this.currentThrottle = throttle;
 
                 response.pipe(throttle).pipe(this.broadcast, { end: false });
 
-                throttle.on('end', () => this.playNext());
+                // Guard per evitare doppi playNext() da race condition end+error
+                let moved = false;
+                const moveToNext = () => {
+                    if (moved) return;
+                    moved = true;
+                    this.playNext();
+                };
+
+                throttle.on('end', moveToNext);
                 throttle.on('error', (err) => {
                     console.error("Errore stream throttle:", err);
-                    this.playNext();
+                    moveToNext();
                 });
                 response.on('error', (err) => {
                     console.error("Errore http stream:", err);
-                    this.playNext();
+                    moveToNext();
                 });
             }).on('error', (err) => {
                 console.error("Errore http.get:", err);

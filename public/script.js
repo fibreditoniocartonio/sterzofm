@@ -663,6 +663,18 @@ function setupPlayer(genreName) {
     document.getElementById('now-playing-title').innerText = "Connessione in corso...";
     document.getElementById('now-playing-time').innerText = "00:00 / 00:00";
 
+    // Auto-reconnect in caso di errore stream (es. NotSupportedError dopo corruzione)
+    audio.removeEventListener('error', audio._errorHandler);
+    audio._errorHandler = () => {
+        console.warn('Errore audio, riconnessione in 3 secondi...');
+        setTimeout(() => {
+            audio.src = `/stream/${genreName}?t=${Date.now()}`;
+            audio.load();
+            audio.play().catch(() => {});
+        }, 3000);
+    };
+    audio.addEventListener('error', audio._errorHandler);
+
     // Avvia il polling periodico dei metadati
     startNowPlayingPolling(genreName);
 

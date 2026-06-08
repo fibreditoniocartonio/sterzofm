@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const https = require('https');
-const { exec } = require('child_process');
 const Throttle = require('throttle');
 
 const PORT = process.env.PORT || 8100;
@@ -15,6 +14,7 @@ let TG_TOKEN = '';
 let TG_CHAT_ID = '';
 let TG_API = '';
 let TG_FILE_API = '';
+let ADMIN_PIN = process.env.ADMIN_PIN;
 
 const CREDENTIALS_PATH = path.join(__dirname, 'telegram_credentials.txt');
 
@@ -23,6 +23,7 @@ if (fs.existsSync(CREDENTIALS_PATH)) {
     lines.forEach(line => {
         if (line.startsWith('TOKEN=')) TG_TOKEN = line.replace('TOKEN=', '').trim();
         if (line.startsWith('CHAT_ID=')) TG_CHAT_ID = line.replace('CHAT_ID=', '').trim();
+        if (line.startsWith('ADMIN_PIN=')) ADMIN_PIN = line.replace('ADMIN_PIN=', '').trim();
     });
 
     TG_API = `https://api.telegram.org/bot${TG_TOKEN}`;
@@ -32,6 +33,8 @@ if (fs.existsSync(CREDENTIALS_PATH)) {
     console.error("Crealo nella cartella root con le righe TOKEN=... e CHAT_ID=...");
     process.exit(1);
 }
+
+if (!ADMIN_PIN) ADMIN_PIN = '1234';
 
 let db = { genres: {}, totalSize: 0 };
 if (fs.existsSync(DB_PATH)) {
@@ -43,17 +46,20 @@ if (fs.existsSync(DB_PATH)) {
     }
 }
 
-function saveDb() {
+async function saveDbAsync() {
     let size = 0;
     for (const g in db.genres) {
         db.genres[g].forEach(t => size += t.size);
     }
     db.totalSize = size;
-    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    const data = JSON.stringify(db, null, 2);
+    const tempPath = DB_PATH + '.tmp';
+    await fs.promises.writeFile(tempPath, data);
+    await fs.promises.rename(tempPath, DB_PATH);
 }
 
 function checkAdminAuth(req) {
-    return req.headers['x-pin'] === '7777';
+    return req.headers['x-pin'] === ADMIN_PIN;
 }
 
 // Chiamate API Telegram generiche via https nativo
@@ -254,7 +260,7 @@ class RadioStation {
 
 const activeStations = new Map();
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname;
 
@@ -315,7 +321,7 @@ const server = http.createServer((req, res) => {
 
     if (pathname === '/api/tracks/download' && req.method === 'GET') {
         const pin = parsedUrl.searchParams.get('pin');
-        if (pin !== '7777') { res.writeHead(401); return res.end('Non autorizzato'); }
+        if (pin !== ADMIN_PIN) { res.writeHead(401); return res.end('Non autorizzato'); }
 
         const genre = parsedUrl.searchParams.get('genre');
         const filename = parsedUrl.searchParams.get('filename');
@@ -346,7 +352,7 @@ const server = http.createServer((req, res) => {
         req.on('end', () => {
             try {
                 const data = JSON.parse(body);
-                if (data.pin === '7777') {
+                if (data.pin === ADMIN_PIN) {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     return res.end(JSON.stringify({ success: true }));
                 } else {
@@ -386,7 +392,7 @@ const server = http.createServer((req, res) => {
         }
         let body = '';
         req.on('data', chunk => body += chunk);
-        req.on('end', () => {
+        req.on('end', async () => {
             try {
                 const data = JSON.parse(body);
                 const safeName = data.name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -394,7 +400,7 @@ const server = http.createServer((req, res) => {
                 if (db.genres[safeName]) { res.writeHead(400); return res.end('Esiste gia'); }
 
                 db.genres[safeName] = [];
-                saveDb();
+                await saveDbAsync();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
             } catch (e) { res.writeHead(400); res.end('Bad Request'); }
@@ -416,7 +422,7 @@ const server = http.createServer((req, res) => {
                 activeStations.delete(genre);
             }
             delete db.genres[genre];
-            saveDb();
+            await saveDbAsync();
             res.writeHead(200, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ success: true }));
         } else {
@@ -436,7 +442,7 @@ const server = http.createServer((req, res) => {
                 tgApiCall('deleteMessage', { chat_id: TG_CHAT_ID, message_id: track.message_id }).catch(() => { });
 
                 db.genres[genre].splice(index, 1);
-                saveDb();
+                await saveDbAsync();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ success: true }));
             }
@@ -461,49 +467,55 @@ const server = http.createServer((req, res) => {
             res.writeHead(500); res.end('Errore salvataggio locale');
         });
 
-        writeStream.on('finish', () => {
-            // Usa curl per caricare il file su Telegram
-            const curlCmd = `curl -s -X POST "${TG_API}/sendAudio" ` +
-                `-F "chat_id=${TG_CHAT_ID}" ` +
-                `-F "audio=@${tempPath}" ` +
-                `-F "caption=#${genre}"`;
+        writeStream.on('finish', async () => {
+            try {
+                const fileBuffer = await fs.promises.readFile(tempPath);
+                const blob = new Blob([fileBuffer], { type: 'audio/mpeg' });
+                const formData = new FormData();
+                formData.append('chat_id', TG_CHAT_ID);
+                formData.append('caption', `#${genre}`);
+                formData.append('audio', blob, filename);
 
-            exec(curlCmd, (error, stdout, stderr) => {
-                fs.unlink(tempPath, () => { }); // Elimina file temporaneo
+                const tgResponse = await fetch(`${TG_API}/sendAudio`, {
+                    method: 'POST',
+                    body: formData
+                });
 
-                if (error) {
-                    res.writeHead(500); return res.end('Errore curl upload');
+                await fs.promises.unlink(tempPath).catch(() => { });
+
+                if (!tgResponse.ok) {
+                    res.writeHead(500); return res.end('Errore HTTP Telegram: ' + tgResponse.status);
                 }
 
-                try {
-                    const tgRes = JSON.parse(stdout);
-                    if (tgRes.ok && tgRes.result.audio) {
-                        const audio = tgRes.result.audio;
-                        db.genres[genre].push({
-                            name: filename,
-                            file_id: audio.file_id,
-                            size: audio.file_size,
-                            duration: audio.duration,
-                            message_id: tgRes.result.message_id
-                        });
-                        saveDb();
+                const tgRes = await tgResponse.json();
+                if (tgRes.ok && tgRes.result.audio) {
+                    const audio = tgRes.result.audio;
+                    db.genres[genre].push({
+                        name: filename,
+                        file_id: audio.file_id,
+                        size: audio.file_size,
+                        duration: audio.duration,
+                        message_id: tgRes.result.message_id
+                    });
+                    await saveDbAsync();
 
-                        const station = activeStations.get(genre);
-                        if (station && station.queue) {
-                            const randomIndex = Math.floor(Math.random() * (station.queue.length + 1));
-                            const newTrack = db.genres[genre][db.genres[genre].length - 1];
-                            station.queue.splice(randomIndex, 0, newTrack);
-                        }
-
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
-                        return res.end(JSON.stringify({ success: true }));
-                    } else {
-                        res.writeHead(500); return res.end('Telegram error: ' + (tgRes.description || 'Unknown'));
+                    const station = activeStations.get(genre);
+                    if (station && station.queue) {
+                        const randomIndex = Math.floor(Math.random() * (station.queue.length + 1));
+                        const newTrack = db.genres[genre][db.genres[genre].length - 1];
+                        station.queue.splice(randomIndex, 0, newTrack);
                     }
-                } catch (e) {
-                    res.writeHead(500); return res.end('Errore parse JSON telegram');
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ success: true }));
+                } else {
+                    res.writeHead(500); return res.end('Telegram error: ' + (tgRes.description || 'Unknown'));
                 }
-            });
+            } catch (e) {
+                console.error("Upload error:", e);
+                await fs.promises.unlink(tempPath).catch(() => { });
+                res.writeHead(500); return res.end('Errore fetch Telegram');
+            }
         });
         return;
     }

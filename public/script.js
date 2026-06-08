@@ -553,6 +553,8 @@ function startNowPlayingPolling(genreName) {
     // Connessione in tempo reale, zero overhead
     eventSource = new EventSource(`/api/now-playing?genre=${encodeURIComponent(genreName)}`);
 
+    let initialTrack = true;
+
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
@@ -565,7 +567,18 @@ function startNowPlayingPolling(genreName) {
         if (title && title.innerText !== cleanTitle) {
             title.innerText = cleanTitle;
             setTimeout(adjustMarquee, 50);
+
+            if (!initialTrack && data.track) {
+                console.log("Track changed, preemptively reloading stream to reset decoder...");
+                const audio = document.getElementById('radio-audio');
+                if (audio) {
+                    audio.src = `/stream/${encodeURIComponent(genreName)}?t=${Date.now()}`;
+                    audio.load();
+                    audio.play().catch(() => {});
+                }
+            }
         }
+        initialTrack = false;
     };
 
     eventSource.onerror = () => {
@@ -666,12 +679,10 @@ function setupPlayer(genreName) {
     // Auto-reconnect in caso di errore stream (es. NotSupportedError dopo corruzione)
     audio.removeEventListener('error', audio._errorHandler);
     audio._errorHandler = () => {
-        console.warn('Errore audio, riconnessione in 3 secondi...');
-        setTimeout(() => {
-            audio.src = `/stream/${genreName}?t=${Date.now()}`;
-            audio.load();
-            audio.play().catch(() => {});
-        }, 3000);
+        console.warn('Errore audio decodifica, ricaricamento istantaneo...');
+        audio.src = `/stream/${encodeURIComponent(genreName)}?t=${Date.now()}`;
+        audio.load();
+        audio.play().catch(() => {});
     };
     audio.addEventListener('error', audio._errorHandler);
 

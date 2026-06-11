@@ -22,6 +22,25 @@ let currentTrackDuration = 0;
 let currentTrackElapsed = 0;
 let currentAudioIndex = 1;
 let crossfadeInterval = null;
+let masterVolume = 1.0;
+let crossfadeRatio = 1.0;
+let oldStartRatio = 1.0;
+
+function applyVolumes() {
+    const a1 = document.getElementById('radio-audio-1');
+    const a2 = document.getElementById('radio-audio-2');
+    
+    if (crossfadeInterval) {
+        const currentAudio = document.getElementById(`radio-audio-${currentAudioIndex}`);
+        const oldAudio = document.getElementById(`radio-audio-${currentAudioIndex === 1 ? 2 : 1}`);
+        
+        if (currentAudio) currentAudio.volume = crossfadeRatio * masterVolume;
+        if (oldAudio) oldAudio.volume = Math.max(0, oldStartRatio * (1 - crossfadeRatio)) * masterVolume;
+    } else {
+        const currentAudio = document.getElementById(`radio-audio-${currentAudioIndex}`);
+        if (currentAudio) currentAudio.volume = masterVolume;
+    }
+}
 
 // Utility per generare seed giornaliero in base al genere
 function getDailyGenreSeed(genre) {
@@ -640,20 +659,20 @@ function startNowPlayingPolling(genreName) {
                 const stepTime = duration / steps;
                 let step = 0;
 
-                const oldStartVolume = oldAudio ? (oldAudio.volume || 1) : 1;
+                oldStartRatio = (oldAudio && masterVolume > 0) ? (oldAudio.volume / masterVolume) : 1;
+                crossfadeRatio = 0;
 
                 crossfadeInterval = setInterval(() => {
                     step++;
-                    const ratio = step / steps;
+                    crossfadeRatio = step / steps;
                     
-                    newAudio.volume = Math.min(1, ratio);
-                    if (oldAudio) {
-                        oldAudio.volume = Math.max(0, oldStartVolume * (1 - ratio));
-                    }
+                    applyVolumes();
 
                     if (step >= steps) {
                         clearInterval(crossfadeInterval);
                         crossfadeInterval = null;
+                        crossfadeRatio = 1.0;
+                        applyVolumes();
                         if (oldAudio) {
                             oldAudio.pause();
                             oldAudio.removeAttribute('src');
@@ -766,7 +785,8 @@ function setupPlayer(genreName) {
     }
 
     // Imposta la sorgente con cache-buster per evitare audio stantio dalla cache del browser
-    audio.volume = 1;
+    crossfadeRatio = 1.0;
+    audio.volume = masterVolume;
     audio.src = `/stream/${genreName}?t=${Date.now()}`;
     document.getElementById('now-playing-title').innerText = "Connessione in corso...";
     document.getElementById('now-playing-time').innerText = "00:00 / 00:00";
@@ -816,6 +836,25 @@ function setupPlayer(genreName) {
     // Imposta il gradiente dinamico basato su genere e data
     const dailyGradient = generateDailyGradient(genreName, audioMotion);
     audioMotion.setOptions({ gradient: dailyGradient });
+
+    // Controlli visualizer (volume, mode, fullscreen)
+    const volSlider = document.getElementById('volume-slider');
+    if (volSlider) {
+        volSlider.value = masterVolume;
+        volSlider.oninput = (e) => {
+            masterVolume = parseFloat(e.target.value);
+            applyVolumes();
+        };
+    }
+
+    const visModeBtn = document.getElementById('vis-mode-btn');
+    if (visModeBtn) {
+        visModeBtn.onclick = () => {
+            if (audioMotion) {
+                audioMotion.mode = (audioMotion.mode + 1) % 11;
+            }
+        };
+    }
 
     // Pulsante fullscreen (icona SVG in basso a destra del visualizer)
     fullscreenBtn.onclick = () => {

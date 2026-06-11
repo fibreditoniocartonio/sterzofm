@@ -331,15 +331,30 @@ const server = http.createServer(async (req, res) => {
 
         getTgFileUrl(track.file_id).then(fileUrl => {
             https.get(fileUrl, (response) => {
-                res.writeHead(200, {
-                    'Content-Type': 'audio/mpeg',
-                    'Content-Disposition': `attachment; filename="${filename}"`,
-                    'Content-Length': track.size
-                });
-                response.pipe(res);
+                try {
+                    const safeHeaderFilename = filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '\\"');
+                    res.writeHead(200, {
+                        'Content-Type': 'audio/mpeg',
+                        'Content-Disposition': `attachment; filename="${safeHeaderFilename}"`,
+                        'Content-Length': track.size
+                    });
+                    response.pipe(res);
+                } catch (err) {
+                    console.error("Errore writeHead in download:", err);
+                    if (!res.headersSent) {
+                        res.writeHead(500); res.end('Errore interno download');
+                    }
+                }
+            }).on('error', (err) => {
+                console.error("Errore http in download:", err);
+                if (!res.headersSent) {
+                    res.writeHead(500); res.end('Errore stream');
+                }
             });
         }).catch(e => {
-            res.writeHead(500); res.end('Errore API Telegram');
+            if (!res.headersSent) {
+                res.writeHead(500); res.end('Errore API Telegram');
+            }
         });
         return;
     }
@@ -454,10 +469,12 @@ const server = http.createServer(async (req, res) => {
         if (!checkAdminAuth(req)) { res.writeHead(401); return res.end(); }
 
         const genre = parsedUrl.searchParams.get('genre');
-        const filename = parsedUrl.searchParams.get('filename');
+        let filename = parsedUrl.searchParams.get('filename');
         if (!genre || !db.genres[genre] || !filename || !filename.toLowerCase().endsWith('.mp3')) {
             res.writeHead(400); return res.end('Parametri non validi');
         }
+
+        filename = filename.replace(/[<>:"/\\|?*#%]/g, '_').replace(/[\x00-\x1F\x7F]/g, '');
 
         const tempPath = path.join(os.tmpdir(), `sterzofm_${Date.now()}_${filename.replace(/[^a-zA-Z0-9.\-_]/g, '')}`);
         const writeStream = fs.createWriteStream(tempPath);

@@ -431,13 +431,20 @@ async function handleDeleteTrack(genre, filename) {
     }
 }
 
+function sanitizeFilename(name) {
+    return name.replace(/[<>:"/\\|?*#%]/g, '_').replace(/[\x00-\x1F\x7F]/g, '');
+}
+
 // Upload Multiplo (Con Avanzamento e Gestione Sequenziale)
 async function handleMultipleUploads(genre, files, statusSpan, existingTracks = []) {
     if (!files || files.length === 0) return;
 
     const existingNames = new Set(existingTracks.map(t => t.name));
 
-    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.mp3') && !existingNames.has(f.name));
+    const validFiles = files.filter(f => {
+        const safeName = sanitizeFilename(f.name);
+        return f.name.toLowerCase().endsWith('.mp3') && !existingNames.has(safeName) && !existingNames.has(f.name);
+    });
     const skippedCount = files.length - validFiles.length;
 
     if (validFiles.length === 0) {
@@ -451,15 +458,16 @@ async function handleMultipleUploads(genre, files, statusSpan, existingTracks = 
 
     for (let i = 0; i < validFiles.length; i++) {
         const file = validFiles[i];
+        const safeName = sanitizeFilename(file.name);
 
         let attempts = 0;
         let success = false;
 
         while (attempts < 3 && !success) {
-            statusSpan.innerText = `Caricamento ${i + 1}/${validFiles.length}: ${file.name} ${attempts > 0 ? `(Tentativo ${attempts + 1}/3)` : '(0%)'}`;
+            statusSpan.innerText = `Caricamento ${i + 1}/${validFiles.length}: ${safeName} ${attempts > 0 ? `(Tentativo ${attempts + 1}/3)` : '(0%)'}`;
             try {
-                await uploadSingleFile(genre, file, (percent) => {
-                    statusSpan.innerText = `Caricamento ${i + 1}/${validFiles.length}: ${file.name} (${percent}%)`;
+                await uploadSingleFile(genre, file, safeName, (percent) => {
+                    statusSpan.innerText = `Caricamento ${i + 1}/${validFiles.length}: ${safeName} (${percent}%)`;
                 });
                 successCount++;
                 success = true;
@@ -468,12 +476,12 @@ async function handleMultipleUploads(genre, files, statusSpan, existingTracks = 
                 console.error(`Errore caricamento ${file.name} (Tentativo ${attempts})`, e);
                 if (attempts < 3) {
                     statusSpan.style.color = '#ffaa00';
-                    statusSpan.innerText = `Errore su ${file.name}. Riprovo tra poco...`;
+                    statusSpan.innerText = `Errore su ${safeName}. Riprovo tra poco...`;
                     await new Promise(r => setTimeout(r, 3000));
                     statusSpan.style.color = '#00ff66';
                 } else {
                     statusSpan.style.color = '#ff3366';
-                    statusSpan.innerText = `Fallito ${file.name}. Continuo col prossimo...`;
+                    statusSpan.innerText = `Fallito ${safeName}. Continuo col prossimo...`;
                     await new Promise(r => setTimeout(r, 2000));
                     statusSpan.style.color = '#00ff66';
                 }
@@ -487,10 +495,10 @@ async function handleMultipleUploads(genre, files, statusSpan, existingTracks = 
     }, 1500);
 }
 
-function uploadSingleFile(genre, file, onProgress) {
+function uploadSingleFile(genre, file, safeName, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        const url = `/api/upload?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(file.name)}`;
+        const url = `/api/upload?genre=${encodeURIComponent(genre)}&filename=${encodeURIComponent(safeName)}`;
 
         xhr.open('POST', url, true);
         xhr.setRequestHeader('X-PIN', getPin());

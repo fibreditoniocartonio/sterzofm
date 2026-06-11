@@ -545,10 +545,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/upload-url' && req.method === 'GET') {
         const pin = parsedUrl.searchParams.get('pin');
         if (pin !== ADMIN_PIN) { res.writeHead(401); return res.end('Non autorizzato'); }
-        
+
         const genre = parsedUrl.searchParams.get('genre');
         const urlParam = parsedUrl.searchParams.get('url');
-        
+
         if (!genre || !db.genres[genre] || !urlParam) {
             res.writeHead(400); return res.end('Parametri non validi');
         }
@@ -571,7 +571,7 @@ const server = http.createServer(async (req, res) => {
                     sendMsg("Scaricamento MP3 diretto...");
                     const filename = path.basename(new URL(urlParam).pathname) || `download_${Date.now()}.mp3`;
                     const tempPath = path.join(os.tmpdir(), `sterzofm_${Date.now()}_${filename.replace(/[^a-zA-Z0-9.\-_]/g, '')}`);
-                    
+
                     await new Promise((resolve, reject) => {
                         const protocol = urlParam.startsWith('https') ? https : http;
                         protocol.get(urlParam, (response) => {
@@ -581,7 +581,7 @@ const server = http.createServer(async (req, res) => {
                             file.on('finish', () => { file.close(); resolve(); });
                         }).on('error', reject);
                     });
-                    
+
                     sendMsg("Caricamento MP3 su Telegram...");
                     await processAndUploadFile(tempPath, genre, filename);
                     sendMsg("Completato con successo!", false, true);
@@ -597,52 +597,51 @@ const server = http.createServer(async (req, res) => {
                 } catch (e) {
                     throw new Error("Moduli yt-dlp-exec o @ffmpeg-installer/ffmpeg mancanti. Esegui npm install yt-dlp-exec @ffmpeg-installer/ffmpeg");
                 }
-                
+
                 sendMsg("Recupero informazioni URL...");
                 // Scarica info senza playlist flat per vedere se e playlist
                 const info = await ytdlp(urlParam, { dumpSingleJson: true, flatPlaylist: true });
-                
+
                 let entries = [];
                 if (info._type === 'playlist' && info.entries) {
                     entries = info.entries;
                 } else {
                     entries = [info];
                 }
-                
+
                 sendMsg(`Trovati ${entries.length} brani.`);
-                
+
                 for (let i = 0; i < entries.length; i++) {
                     const entry = entries[i];
                     const itemUrl = entry.url || `https://www.youtube.com/watch?v=${entry.id}`;
                     let safeTitle = (entry.title || `Traccia_${i}`).replace(/[<>:"/\\|?*#%]/g, '_').replace(/[\x00-\x1F\x7F]/g, '');
-                    
+
                     // Rimuovi estensioni preesistenti per evitare doppi .mp3
                     if (safeTitle.toLowerCase().endsWith('.mp3')) {
                         safeTitle = safeTitle.slice(0, -4);
                     }
 
                     const tempPath = path.join(os.tmpdir(), `sterzofm_ytdl_${Date.now()}_${i}.mp3`);
-                    
-                    sendMsg(`[${i+1}/${entries.length}] Download: ${safeTitle}...`);
-                    
+
+                    sendMsg(`[${i + 1}/${entries.length}] Download: ${safeTitle}...`);
+
                     // Limitazioni risorse per yt-dlp
                     await ytdlp(itemUrl, {
                         extractAudio: true,
                         audioFormat: 'mp3',
                         audioQuality: 5,
                         ffmpegLocation: ffmpegPath,
-                        output: tempPath,
-                        limitRate: '500K' // Limita uso banda
+                        output: tempPath
                     });
-                    
-                    sendMsg(`[${i+1}/${entries.length}] Upload: ${safeTitle}...`);
+
+                    sendMsg(`[${i + 1}/${entries.length}] Upload: ${safeTitle}...`);
                     await processAndUploadFile(tempPath, genre, safeTitle + '.mp3');
-                    sendMsg(`[${i+1}/${entries.length}] Finito: ${safeTitle}`);
+                    sendMsg(`[${i + 1}/${entries.length}] Finito: ${safeTitle}`);
                 }
-                
+
                 sendMsg("Tutti i brani completati con successo!", false, true);
                 res.end();
-                
+
             } catch (err) {
                 console.error("Errore URL upload:", err);
                 sendMsg("Errore: " + err.message, true, true);

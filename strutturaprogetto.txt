@@ -1,7 +1,0 @@
-sterzofm/
-├── tracks/            <-- Qui dentro nasceranno le cartelle dei generi (es. tracks/trance/)
-├── public/
-│   ├── index.html     <-- Interfaccia unica (Hub + Player)
-│   ├── style.css      <-- Grafica pulita
-│   └── script.js      <-- Logica di gestione e Visualizer audio
-└── server.js          <-- Il cuore del server (Zero dipendenze)

@@ -890,17 +890,106 @@ function setupPlayer(genreName) {
     }
 
     const visualizerPresets = [
-        { mode: 5, radial: false, ledBars: false, lumiBars: false, outlineBars: false, fillAlpha: 1, barSpace: 2 }, // Barre classiche
-        { mode: 0, radial: false, ledBars: false, lumiBars: false, outlineBars: true, fillAlpha: 0.1, barSpace: 0 }, // Riga spettrometro
-        { mode: 5, radial: true, ledBars: false, lumiBars: false, outlineBars: false, fillAlpha: 1, barSpace: 2 }, // Barre circolari
-        { mode: 4, radial: false, ledBars: true, lumiBars: false, outlineBars: false, fillAlpha: 1, barSpace: 2 }, // Barre LED
-        { mode: 0, radial: true, ledBars: false, lumiBars: false, outlineBars: true, fillAlpha: 0.1, barSpace: 0 }, // Riga circolare
-        { mode: 6, radial: false, ledBars: false, lumiBars: true, outlineBars: false, fillAlpha: 1, barSpace: 2 }  // Lumi bars
+        // 1. Barre Classiche
+        { name: 'Barre Classiche', mode: 5, barSpace: 0.25, ledBars: false, lumiBars: false, outlineBars: false,
+          fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true,
+          roundBars: false, alphaBars: false, lineWidth: 0, spinSpeed: 0, channelLayout: 'single', colorMode: 'gradient' },
+        // 2. Onda Spettrale (FIX: mode 10 al posto di mode 0+outlineBars per evitare il distacco a sinistra)
+        { name: 'Onda Spettrale', mode: 10, lineWidth: 2, fillAlpha: 0.15, radial: false, mirror: 0,
+          reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true, ledBars: false, lumiBars: false,
+          outlineBars: false, roundBars: false, alphaBars: false, barSpace: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'gradient' },
+        // 3. Barre Circolari
+        { name: 'Barre Circolari', mode: 5, barSpace: 0.25, radial: true, ledBars: false, lumiBars: false,
+          outlineBars: false, fillAlpha: 1, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true,
+          roundBars: false, alphaBars: false, lineWidth: 0, spinSpeed: 0, channelLayout: 'single', colorMode: 'gradient' },
+        // 4. Barre LED
+        { name: 'Barre LED', mode: 4, barSpace: 0.5, ledBars: true, lumiBars: false, outlineBars: false,
+          fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true,
+          roundBars: false, alphaBars: false, lineWidth: 0, spinSpeed: 0, channelLayout: 'single', colorMode: 'gradient' },
+        // 5. Anello di Luce (radiale + line graph + spin)
+        { name: 'Anello di Luce', mode: 10, lineWidth: 2.5, fillAlpha: 0.1, radial: true,
+          spinSpeed: 1, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true,
+          ledBars: false, lumiBars: false, outlineBars: false, roundBars: false, alphaBars: false,
+          barSpace: 0, channelLayout: 'single', colorMode: 'gradient' },
+        // 6. Lumi Bars
+        { name: 'Lumi Bars', mode: 6, barSpace: 0.25, lumiBars: true, ledBars: false, outlineBars: false,
+          fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true,
+          roundBars: false, alphaBars: false, lineWidth: 0, spinSpeed: 0, channelLayout: 'single', colorMode: 'gradient' },
+        // 7. Barre con Riflesso
+        { name: 'Barre + Riflesso', mode: 5, barSpace: 0.25, reflexRatio: 0.35, reflexAlpha: 0.25,
+          reflexBright: 1, reflexFit: true, ledBars: false, lumiBars: false, outlineBars: false, fillAlpha: 1,
+          radial: false, mirror: 0, roundBars: false, alphaBars: false, lineWidth: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'gradient' },
+        // 8. Onda con Riflesso
+        { name: 'Onda + Riflesso', mode: 10, lineWidth: 2, fillAlpha: 0.2, reflexRatio: 0.4,
+          reflexAlpha: 0.3, reflexBright: 0.8, reflexFit: true, radial: false, mirror: 0, ledBars: false,
+          lumiBars: false, outlineBars: false, roundBars: false, alphaBars: false, barSpace: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'gradient' },
+        // 9. Dual Channel (doppio canale sovrapposto)
+        { name: 'Dual Channel', mode: 3, barSpace: 0.15, channelLayout: 'dual-combined', fillAlpha: 0.6,
+          outlineBars: true, lineWidth: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15,
+          reflexBright: 1, reflexFit: true, ledBars: false, lumiBars: false, roundBars: false, alphaBars: false,
+          spinSpeed: 0, colorMode: 'gradient' },
+        // 10. Barre Arrotondate (colorMode bar-level)
+        { name: 'Barre Arrotondate', mode: 6, barSpace: 0.4, roundBars: true, ledBars: false,
+          lumiBars: false, outlineBars: false, fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0,
+          reflexAlpha: 0.15, reflexBright: 1, reflexFit: true, alphaBars: false, lineWidth: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'bar-level' },
+        // 11. Mirrorball (radiale che ruota con colori per barra)
+        { name: 'Mirrorball', mode: 3, barSpace: 0.2, radial: true, spinSpeed: 2, ledBars: false,
+          lumiBars: false, outlineBars: false, fillAlpha: 1, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15,
+          reflexBright: 1, reflexFit: true, roundBars: false, alphaBars: false, lineWidth: 0,
+          channelLayout: 'single', colorMode: 'bar-index' },
+        // 12. Barre Fantasma (alphaBars: trasparenza variabile)
+        { name: 'Barre Fantasma', mode: 4, barSpace: 0.3, alphaBars: true, ledBars: false, lumiBars: false,
+          outlineBars: false, fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15,
+          reflexBright: 1, reflexFit: true, roundBars: false, lineWidth: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'gradient' },
+        // 13. Spettro Denso (1/12 ottava, 120 barre sottili)
+        { name: 'Spettro Denso', mode: 2, barSpace: 0.05, ledBars: false, lumiBars: false,
+          outlineBars: false, fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15,
+          reflexBright: 1, reflexFit: true, roundBars: false, alphaBars: false, lineWidth: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'gradient' },
+        // 14. Full Octave (10 barre grosse, rilassante)
+        { name: 'Full Octave', mode: 8, barSpace: 0.3, roundBars: true, ledBars: false, lumiBars: false,
+          outlineBars: false, fillAlpha: 1, radial: false, mirror: 0, reflexRatio: 0, reflexAlpha: 0.15,
+          reflexBright: 1, reflexFit: true, alphaBars: false, lineWidth: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'bar-level' },
+        // 15. Nebula Mirror (area graph specchiata simmetrica)
+        { name: 'Nebula Mirror', mode: 10, lineWidth: 1.5, fillAlpha: 0.3, mirror: -1, radial: false,
+          reflexRatio: 0, reflexAlpha: 0.15, reflexBright: 1, reflexFit: true, ledBars: false, lumiBars: false,
+          outlineBars: false, roundBars: false, alphaBars: false, barSpace: 0, spinSpeed: 0,
+          channelLayout: 'single', colorMode: 'gradient' }
     ];
     let currentVisPreset = parseInt(localStorage.getItem('sfm_vis_preset') ?? '0', 10);
     if (currentVisPreset >= visualizerPresets.length) currentVisPreset = 0;
     // Applica il preset salvato all'avvio
     audioMotion.setOptions(visualizerPresets[currentVisPreset]);
+
+    // Tooltip per mostrare il nome della modalità corrente
+    let visTooltipTimeout = null;
+    function showVisTooltip(name) {
+        let tooltip = document.getElementById('vis-mode-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'vis-mode-tooltip';
+            tooltip.className = 'vis-mode-tooltip';
+            const controls = document.querySelector('.visualizer-controls');
+            if (controls) controls.appendChild(tooltip);
+        }
+        tooltip.textContent = name;
+        tooltip.classList.remove('vis-tooltip-fade');
+        // Force reflow per riavviare l'animazione
+        void tooltip.offsetWidth;
+        tooltip.classList.add('vis-tooltip-visible');
+        
+        if (visTooltipTimeout) clearTimeout(visTooltipTimeout);
+        visTooltipTimeout = setTimeout(() => {
+            tooltip.classList.add('vis-tooltip-fade');
+            tooltip.classList.remove('vis-tooltip-visible');
+        }, 1500);
+    }
 
     const visModeBtn = document.getElementById('vis-mode-btn');
     if (visModeBtn) {
@@ -909,6 +998,7 @@ function setupPlayer(genreName) {
                 currentVisPreset = (currentVisPreset + 1) % visualizerPresets.length;
                 localStorage.setItem('sfm_vis_preset', currentVisPreset);
                 audioMotion.setOptions(visualizerPresets[currentVisPreset]);
+                showVisTooltip(visualizerPresets[currentVisPreset].name);
             }
         };
     }

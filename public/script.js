@@ -847,14 +847,46 @@ function setupPlayer(genreName) {
     audioMotion.setOptions({ gradient: dailyGradient });
 
     // Controlli visualizer (volume, mode, fullscreen)
-    const volSlider = document.getElementById('volume-slider');
-    if (volSlider) {
-        volSlider.value = masterVolume;
-        volSlider.oninput = (e) => {
-            masterVolume = parseFloat(e.target.value);
+    const volumeBar = document.getElementById('volume-bar');
+    const volumeMask = document.getElementById('volume-bar-mask');
+
+    function updateVolumeBar(vol) {
+        if (volumeMask) volumeMask.style.height = ((1 - vol) * 100) + '%';
+    }
+
+    updateVolumeBar(masterVolume);
+
+    if (volumeBar) {
+        const setVolumeFromEvent = (e) => {
+            const rect = volumeBar.getBoundingClientRect();
+            const y = Math.max(0, Math.min(1, (rect.bottom - e.clientY) / rect.height));
+            masterVolume = Math.round(y * 100) / 100;
             localStorage.setItem('sfm_volume', masterVolume);
+            updateVolumeBar(masterVolume);
             applyVolumes();
         };
+
+        volumeBar.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            setVolumeFromEvent(e);
+            const onMove = (ev) => setVolumeFromEvent(ev);
+            const onUp = () => {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
+            };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        });
+
+        // Touch support
+        volumeBar.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            setVolumeFromEvent(e.touches[0]);
+        }, { passive: false });
+        volumeBar.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            setVolumeFromEvent(e.touches[0]);
+        }, { passive: false });
     }
 
     const visualizerPresets = [

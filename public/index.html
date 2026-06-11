@@ -49,8 +49,9 @@
             <!-- Il visualizer ha position:relative per ancorare il bottone -->
             <div id="visualizer-container">
                 <div class="visualizer-controls">
-                    <div class="volume-slider-wrapper" title="Volume generale">
-                        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+                    <div id="volume-bar" class="volume-bar" title="Volume generale">
+                        <div class="volume-bar-gradient"></div>
+                        <div class="volume-bar-mask" id="volume-bar-mask"></div>
                     </div>
                     <button id="vis-mode-btn" title="Cambia visualizzatore">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">

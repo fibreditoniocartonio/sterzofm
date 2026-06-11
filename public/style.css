@@ -177,8 +177,8 @@ button:active {
 }
 
 #volume-slider {
-    -webkit-appearance: slider-vertical;
-    appearance: slider-vertical;
+    writing-mode: vertical-lr;
+    direction: rtl;
     width: 100%;
     height: 100%;
     margin: 0;

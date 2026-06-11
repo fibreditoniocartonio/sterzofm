@@ -847,11 +847,22 @@ function setupPlayer(genreName) {
         };
     }
 
+    const visualizerPresets = [
+        { mode: 5, radial: false, ledBars: false, lumiBars: false, outlineBars: false, fillAlpha: 1, barSpace: 2 }, // Barre classiche
+        { mode: 0, radial: false, ledBars: false, lumiBars: false, outlineBars: true, fillAlpha: 0.1, barSpace: 0 }, // Riga spettrometro
+        { mode: 5, radial: true, ledBars: false, lumiBars: false, outlineBars: false, fillAlpha: 1, barSpace: 2 }, // Barre circolari
+        { mode: 4, radial: false, ledBars: true, lumiBars: false, outlineBars: false, fillAlpha: 1, barSpace: 2 }, // Barre LED
+        { mode: 0, radial: true, ledBars: false, lumiBars: false, outlineBars: true, fillAlpha: 0.1, barSpace: 0 }, // Riga circolare
+        { mode: 6, radial: false, ledBars: false, lumiBars: true, outlineBars: false, fillAlpha: 1, barSpace: 2 }  // Lumi bars
+    ];
+    let currentVisPreset = 0;
+
     const visModeBtn = document.getElementById('vis-mode-btn');
     if (visModeBtn) {
         visModeBtn.onclick = () => {
             if (audioMotion) {
-                audioMotion.mode = (audioMotion.mode + 1) % 11;
+                currentVisPreset = (currentVisPreset + 1) % visualizerPresets.length;
+                audioMotion.setOptions(visualizerPresets[currentVisPreset]);
             }
         };
     }

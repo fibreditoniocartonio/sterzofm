@@ -368,6 +368,20 @@ function renderAdminDashboard(data) {
         statusSpan.id = `status-${genre}`;
 
         uploadLabel.appendChild(fileInput);
+
+        const urlUploadBtn = document.createElement('button');
+        urlUploadBtn.className = 'upload-btn-label';
+        urlUploadBtn.style.marginRight = '10px';
+        urlUploadBtn.style.cursor = 'pointer';
+        urlUploadBtn.innerText = 'Carica da URL';
+        urlUploadBtn.onclick = () => {
+            const url = prompt("Inserisci URL (es. Youtube, Playlist o MP3 diretto):");
+            if (url && url.trim()) {
+                handleUrlUpload(genre, url.trim(), statusSpan);
+            }
+        };
+
+        uploadSec.appendChild(urlUploadBtn);
         uploadSec.appendChild(uploadLabel);
         uploadSec.appendChild(statusSpan);
         body.appendChild(uploadSec);
@@ -506,6 +520,34 @@ async function handleDeleteTrack(genre, filename) {
 
 function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*#%]/g, '_').replace(/[\x00-\x1F\x7F]/g, '');
+}
+
+// Upload da URL tramite SSE
+function handleUrlUpload(genre, url, statusSpan) {
+    statusSpan.style.color = '#ffaa00';
+    statusSpan.innerText = 'Avvio elaborazione URL...';
+    
+    const sseUrl = `/api/upload-url?genre=${encodeURIComponent(genre)}&url=${encodeURIComponent(url)}&pin=${encodeURIComponent(getPin())}`;
+    const source = new EventSource(sseUrl);
+    
+    source.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.msg) {
+            statusSpan.innerText = data.msg;
+            if (data.error) statusSpan.style.color = '#ff3366';
+            else statusSpan.style.color = '#00ff66';
+        }
+        if (data.done) {
+            source.close();
+            setTimeout(() => { loadAdminDashboard(); }, 2000);
+        }
+    };
+    source.onerror = () => {
+        statusSpan.style.color = '#ff3366';
+        statusSpan.innerText = 'Errore di connessione o elaborazione terminata in modo imprevisto.';
+        source.close();
+        setTimeout(() => { loadAdminDashboard(); }, 2000);
+    };
 }
 
 // Upload Multiplo (Con Avanzamento e Gestione Sequenziale)

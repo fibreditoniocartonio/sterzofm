@@ -62,6 +62,50 @@ function checkAdminAuth(req) {
     return req.headers['x-pin'] === ADMIN_PIN;
 }
 
+// Funzione riutilizzabile per caricare il file su Telegram e aggiornare il database
+async function processAndUploadFile(tempPath, genre, filename) {
+    const fileBuffer = await fs.promises.readFile(tempPath);
+    const blob = new Blob([fileBuffer], { type: 'audio/mpeg' });
+    const formData = new FormData();
+    formData.append('chat_id', TG_CHAT_ID);
+    formData.append('caption', `#${genre}`);
+    formData.append('audio', blob, filename);
+
+    const tgResponse = await fetch(`${TG_API}/sendAudio`, {
+        method: 'POST',
+        body: formData
+    });
+
+    await fs.promises.unlink(tempPath).catch(() => { });
+
+    if (!tgResponse.ok) {
+        throw new Error('Errore HTTP Telegram: ' + tgResponse.status);
+    }
+
+    const tgRes = await tgResponse.json();
+    if (tgRes.ok && tgRes.result.audio) {
+        const audio = tgRes.result.audio;
+        db.genres[genre].push({
+            name: filename,
+            file_id: audio.file_id,
+            size: audio.file_size,
+            duration: audio.duration,
+            message_id: tgRes.result.message_id
+        });
+        await saveDbAsync();
+
+        const station = activeStations.get(genre);
+        if (station && station.queue) {
+            const randomIndex = Math.floor(Math.random() * (station.queue.length + 1));
+            const newTrack = db.genres[genre][db.genres[genre].length - 1];
+            station.queue.splice(randomIndex, 0, newTrack);
+        }
+        return true;
+    } else {
+        throw new Error('Telegram error: ' + (tgRes.description || 'Unknown'));
+    }
+}
+
 // Chiamate API Telegram generiche via https nativo
 function tgApiCall(method, params = {}) {
     return new Promise((resolve, reject) => {
@@ -486,54 +530,125 @@ const server = http.createServer(async (req, res) => {
 
         writeStream.on('finish', async () => {
             try {
-                const fileBuffer = await fs.promises.readFile(tempPath);
-                const blob = new Blob([fileBuffer], { type: 'audio/mpeg' });
-                const formData = new FormData();
-                formData.append('chat_id', TG_CHAT_ID);
-                formData.append('caption', `#${genre}`);
-                formData.append('audio', blob, filename);
-
-                const tgResponse = await fetch(`${TG_API}/sendAudio`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                await fs.promises.unlink(tempPath).catch(() => { });
-
-                if (!tgResponse.ok) {
-                    res.writeHead(500); return res.end('Errore HTTP Telegram: ' + tgResponse.status);
-                }
-
-                const tgRes = await tgResponse.json();
-                if (tgRes.ok && tgRes.result.audio) {
-                    const audio = tgRes.result.audio;
-                    db.genres[genre].push({
-                        name: filename,
-                        file_id: audio.file_id,
-                        size: audio.file_size,
-                        duration: audio.duration,
-                        message_id: tgRes.result.message_id
-                    });
-                    await saveDbAsync();
-
-                    const station = activeStations.get(genre);
-                    if (station && station.queue) {
-                        const randomIndex = Math.floor(Math.random() * (station.queue.length + 1));
-                        const newTrack = db.genres[genre][db.genres[genre].length - 1];
-                        station.queue.splice(randomIndex, 0, newTrack);
-                    }
-
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ success: true }));
-                } else {
-                    res.writeHead(500); return res.end('Telegram error: ' + (tgRes.description || 'Unknown'));
-                }
+                await processAndUploadFile(tempPath, genre, filename);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ success: true }));
             } catch (e) {
                 console.error("Upload error:", e);
                 await fs.promises.unlink(tempPath).catch(() => { });
-                res.writeHead(500); return res.end('Errore fetch Telegram');
+                res.writeHead(500); return res.end('Errore caricamento Telegram');
             }
         });
+        return;
+    }
+
+    if (pathname === '/api/upload-url' && req.method === 'GET') {
+        const pin = parsedUrl.searchParams.get('pin');
+        if (pin !== ADMIN_PIN) { res.writeHead(401); return res.end('Non autorizzato'); }
+        
+        const genre = parsedUrl.searchParams.get('genre');
+        const urlParam = parsedUrl.searchParams.get('url');
+        
+        if (!genre || !db.genres[genre] || !urlParam) {
+            res.writeHead(400); return res.end('Parametri non validi');
+        }
+
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        });
+
+        const sendMsg = (msg, isError = false, done = false) => {
+            res.write(`data: ${JSON.stringify({ msg, error: isError, done })}\n\n`);
+        };
+
+        (async () => {
+            try {
+                // Direct MP3 check
+                if (urlParam.toLowerCase().endsWith('.mp3')) {
+                    sendMsg("Scaricamento MP3 diretto...");
+                    const filename = path.basename(new URL(urlParam).pathname) || `download_${Date.now()}.mp3`;
+                    const tempPath = path.join(os.tmpdir(), `sterzofm_${Date.now()}_${filename.replace(/[^a-zA-Z0-9.\-_]/g, '')}`);
+                    
+                    await new Promise((resolve, reject) => {
+                        const protocol = urlParam.startsWith('https') ? https : http;
+                        protocol.get(urlParam, (response) => {
+                            if (response.statusCode !== 200) return reject(new Error('HTTP ' + response.statusCode));
+                            const file = fs.createWriteStream(tempPath);
+                            response.pipe(file);
+                            file.on('finish', () => { file.close(); resolve(); });
+                        }).on('error', reject);
+                    });
+                    
+                    sendMsg("Caricamento MP3 su Telegram...");
+                    await processAndUploadFile(tempPath, genre, filename);
+                    sendMsg("Completato con successo!", false, true);
+                    return res.end();
+                }
+
+                // yt-dlp logic
+                let ytdlp;
+                let ffmpegPath;
+                try {
+                    ytdlp = require('yt-dlp-exec');
+                    ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+                } catch (e) {
+                    throw new Error("Moduli yt-dlp-exec o @ffmpeg-installer/ffmpeg mancanti. Esegui npm install yt-dlp-exec @ffmpeg-installer/ffmpeg");
+                }
+                
+                sendMsg("Recupero informazioni URL...");
+                // Scarica info senza playlist flat per vedere se e playlist
+                const info = await ytdlp(urlParam, { dumpSingleJson: true, flatPlaylist: true });
+                
+                let entries = [];
+                if (info._type === 'playlist' && info.entries) {
+                    entries = info.entries;
+                } else {
+                    entries = [info];
+                }
+                
+                sendMsg(`Trovati ${entries.length} brani.`);
+                
+                for (let i = 0; i < entries.length; i++) {
+                    const entry = entries[i];
+                    const itemUrl = entry.url || `https://www.youtube.com/watch?v=${entry.id}`;
+                    let safeTitle = (entry.title || `Traccia_${i}`).replace(/[<>:"/\\|?*#%]/g, '_').replace(/[\x00-\x1F\x7F]/g, '');
+                    
+                    // Rimuovi estensioni preesistenti per evitare doppi .mp3
+                    if (safeTitle.toLowerCase().endsWith('.mp3')) {
+                        safeTitle = safeTitle.slice(0, -4);
+                    }
+
+                    const tempPath = path.join(os.tmpdir(), `sterzofm_ytdl_${Date.now()}_${i}.mp3`);
+                    
+                    sendMsg(`[${i+1}/${entries.length}] Download: ${safeTitle}...`);
+                    
+                    // Limitazioni risorse per yt-dlp
+                    await ytdlp(itemUrl, {
+                        extractAudio: true,
+                        audioFormat: 'mp3',
+                        audioQuality: 5,
+                        ffmpegLocation: ffmpegPath,
+                        output: tempPath,
+                        limitRate: '500K' // Limita uso banda
+                    });
+                    
+                    sendMsg(`[${i+1}/${entries.length}] Upload: ${safeTitle}...`);
+                    await processAndUploadFile(tempPath, genre, safeTitle + '.mp3');
+                    sendMsg(`[${i+1}/${entries.length}] Finito: ${safeTitle}`);
+                }
+                
+                sendMsg("Tutti i brani completati con successo!", false, true);
+                res.end();
+                
+            } catch (err) {
+                console.error("Errore URL upload:", err);
+                sendMsg("Errore: " + err.message, true, true);
+                res.end();
+            }
+        })();
         return;
     }
 

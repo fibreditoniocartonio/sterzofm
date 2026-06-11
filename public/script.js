@@ -20,6 +20,8 @@ let trackHistory = [];
 let eventSource = null;
 let currentTrackDuration = 0;
 let currentTrackElapsed = 0;
+let currentAudioIndex = 1;
+let crossfadeInterval = null;
 
 // Formatta i byte in MB o GB in modo leggibile
 function formatSize(bytes) {
@@ -46,10 +48,12 @@ function route() {
     stopNowPlayingPolling();
 
     // Se lasciamo la pagina del player, fermiamo l'audio per evitare riproduzioni orfane
-    const audio = document.getElementById('radio-audio');
-    if (audio && (hash === '#admin' || path === '/admin' || !cleanGenre || cleanGenre === "index.html")) {
-        audio.pause();
-        audio.src = '';
+    const audio1 = document.getElementById('radio-audio-1');
+    const audio2 = document.getElementById('radio-audio-2');
+    if (hash === '#admin' || path === '/admin' || !cleanGenre || cleanGenre === "index.html") {
+        if (audio1) { audio1.pause(); audio1.removeAttribute('src'); audio1.load(); }
+        if (audio2) { audio2.pause(); audio2.removeAttribute('src'); audio2.load(); }
+        if (crossfadeInterval) clearInterval(crossfadeInterval);
     }
 
     if (hash === '#admin' || path === '/admin') {
@@ -577,13 +581,45 @@ function startNowPlayingPolling(genreName) {
             setTimeout(adjustMarquee, 50);
 
             if (!initialTrack && data.track) {
-                console.log("Track changed, preemptively reloading stream to reset decoder...");
-                const audio = document.getElementById('radio-audio');
-                if (audio) {
-                    audio.src = `/stream/${encodeURIComponent(genreName)}?t=${Date.now()}`;
-                    audio.load();
-                    audio.play().catch(() => {});
-                }
+                console.log("Track changed, starting soft crossfade...");
+                const oldAudio = document.getElementById(`radio-audio-${currentAudioIndex}`);
+                
+                currentAudioIndex = currentAudioIndex === 1 ? 2 : 1;
+                const newAudio = document.getElementById(`radio-audio-${currentAudioIndex}`);
+                
+                newAudio.src = `/stream/${encodeURIComponent(genreName)}?t=${Date.now()}`;
+                newAudio.volume = 0;
+                newAudio.load();
+                newAudio.play().catch(() => {});
+
+                if (crossfadeInterval) clearInterval(crossfadeInterval);
+
+                const duration = 3000; // 3 seconds crossfade (softer)
+                const steps = 30;
+                const stepTime = duration / steps;
+                let step = 0;
+
+                const oldStartVolume = oldAudio ? (oldAudio.volume || 1) : 1;
+
+                crossfadeInterval = setInterval(() => {
+                    step++;
+                    const ratio = step / steps;
+                    
+                    newAudio.volume = Math.min(1, ratio);
+                    if (oldAudio) {
+                        oldAudio.volume = Math.max(0, oldStartVolume * (1 - ratio));
+                    }
+
+                    if (step >= steps) {
+                        clearInterval(crossfadeInterval);
+                        crossfadeInterval = null;
+                        if (oldAudio) {
+                            oldAudio.pause();
+                            oldAudio.removeAttribute('src');
+                            oldAudio.load();
+                        }
+                    }
+                }, stepTime);
             }
         }
         initialTrack = false;
@@ -624,7 +660,16 @@ function stopNowPlayingPolling() {
 }
 
 function setupPlayer(genreName) {
-    const audio = document.getElementById('radio-audio');
+    const audio1 = document.getElementById('radio-audio-1');
+    const audio2 = document.getElementById('radio-audio-2');
+    const audio = document.getElementById(`radio-audio-${currentAudioIndex}`);
+    
+    // Ferma l'altro audio se in esecuzione
+    const otherAudio = currentAudioIndex === 1 ? audio2 : audio1;
+    otherAudio.pause();
+    otherAudio.removeAttribute('src');
+    otherAudio.load();
+
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const fullscreenWrapper = document.getElementById('visualizer-fullscreen-wrapper');
     const copyBtn = document.getElementById('copy-stream-btn');
@@ -680,19 +725,28 @@ function setupPlayer(genreName) {
     }
 
     // Imposta la sorgente con cache-buster per evitare audio stantio dalla cache del browser
+    audio.volume = 1;
     audio.src = `/stream/${genreName}?t=${Date.now()}`;
     document.getElementById('now-playing-title').innerText = "Connessione in corso...";
     document.getElementById('now-playing-time').innerText = "00:00 / 00:00";
 
-    // Auto-reconnect in caso di errore stream (es. NotSupportedError dopo corruzione)
-    audio.removeEventListener('error', audio._errorHandler);
-    audio._errorHandler = () => {
-        console.warn('Errore audio decodifica, ricaricamento istantaneo...');
-        audio.src = `/stream/${encodeURIComponent(genreName)}?t=${Date.now()}`;
-        audio.load();
-        audio.play().catch(() => {});
+    // Auto-reconnect in caso di errore stream
+    const attachErrorHandler = (aud) => {
+        aud.removeEventListener('error', aud._errorHandler);
+        aud._errorHandler = () => {
+            // Ricarica solo se questo è l'audio attualmente attivo o in fadein
+            if (aud.src && aud.src !== window.location.href) {
+                console.warn(`Errore audio decodifica su ${aud.id}, ricaricamento istantaneo...`);
+                aud.src = `/stream/${encodeURIComponent(genreName)}?t=${Date.now()}`;
+                aud.load();
+                aud.play().catch(() => {});
+            }
+        };
+        aud.addEventListener('error', aud._errorHandler);
     };
-    audio.addEventListener('error', audio._errorHandler);
+    
+    attachErrorHandler(audio1);
+    attachErrorHandler(audio2);
 
     // Avvia il polling periodico dei metadati
     startNowPlayingPolling(genreName);
@@ -702,7 +756,7 @@ function setupPlayer(genreName) {
         audioMotion = new AudioMotionAnalyzer(
             document.getElementById('visualizer-container'),
             {
-                source: audio,
+                source: audio1, // connette il primo inizialmente
                 height: 300,
                 ansiColors: true,
                 mode: 5,
@@ -716,6 +770,7 @@ function setupPlayer(genreName) {
                 gradient: 'prism'
             }
         );
+        audioMotion.connectInput(audio2); // connette anche il secondo in modo permanente
     }
 
     // Pulsante fullscreen (icona SVG in basso a destra del visualizer)

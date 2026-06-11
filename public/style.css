@@ -190,7 +190,7 @@ button:active {
     left: 0;
     right: 0;
     height: 0%;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.95);
     border-radius: 3px 3px 0 0;
     pointer-events: none;
     transition: height 0.08s ease-out;

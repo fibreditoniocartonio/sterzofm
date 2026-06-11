@@ -23,6 +23,47 @@ let currentTrackElapsed = 0;
 let currentAudioIndex = 1;
 let crossfadeInterval = null;
 
+// Utility per generare seed giornaliero in base al genere
+function getDailyGenreSeed(genre) {
+    const today = new Date();
+    const dateString = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+    const seedString = `${genre}-${dateString}`;
+    let hash = 0;
+    for (let i = 0; i < seedString.length; i++) {
+        hash = Math.imul(31, hash) + seedString.charCodeAt(i) | 0;
+    }
+    return Math.abs(hash) || 1;
+}
+
+// Genera un gradiente per audioMotion basato sul seed giornaliero
+function generateDailyGradient(genre, audioMotionInstance) {
+    let seed = getDailyGenreSeed(genre);
+    function random() {
+        let x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    }
+    
+    const gradientName = `daily-${genre.replace(/[^a-zA-Z0-9]/g, '')}`;
+    
+    const baseHue = Math.floor(random() * 360);
+    // Variazione di tonalità armonica tra basso e alto
+    const hueShift = Math.floor(random() * 60) + 30; 
+    
+    const colorStops = [
+        { pos: 0, color: `hsl(${baseHue}, 100%, 60%)` },
+        { pos: 0.5, color: `hsl(${(baseHue + hueShift) % 360}, 100%, 55%)` },
+        { pos: 1, color: `hsl(${(baseHue + hueShift * 2) % 360}, 100%, 50%)` }
+    ];
+    
+    audioMotionInstance.registerGradient(gradientName, {
+        bgColor: 'transparent',
+        dir: 'v',
+        colorStops: colorStops
+    });
+    
+    return gradientName;
+}
+
 // Formatta i byte in MB o GB in modo leggibile
 function formatSize(bytes) {
     const mb = bytes / (1024 * 1024);
@@ -766,12 +807,15 @@ function setupPlayer(genreName) {
                 showScaleY: false,
                 showPeaks: true,
                 overlay: true,
-                bgAlpha: 0,
-                gradient: 'prism'
+                bgAlpha: 0
             }
         );
         audioMotion.connectInput(audio2); // connette anche il secondo in modo permanente
     }
+
+    // Imposta il gradiente dinamico basato su genere e data
+    const dailyGradient = generateDailyGradient(genreName, audioMotion);
+    audioMotion.setOptions({ gradient: dailyGradient });
 
     // Pulsante fullscreen (icona SVG in basso a destra del visualizer)
     fullscreenBtn.onclick = () => {

@@ -22,7 +22,7 @@ let currentTrackDuration = 0;
 let currentTrackElapsed = 0;
 let currentAudioIndex = 1;
 let crossfadeInterval = null;
-let masterVolume = 1.0;
+let masterVolume = parseFloat(localStorage.getItem('sfm_volume') ?? '1');
 let crossfadeRatio = 1.0;
 let oldStartRatio = 1.0;
 
@@ -68,10 +68,14 @@ function generateDailyGradient(genre, audioMotionInstance) {
     // Variazione di tonalità armonica tra basso e alto
     const hueShift = Math.floor(random() * 60) + 30; 
     
+    const cssColor1 = `hsl(${baseHue}, 100%, 60%)`;
+    const cssColor2 = `hsl(${(baseHue + hueShift) % 360}, 100%, 55%)`;
+    const cssColor3 = `hsl(${(baseHue + hueShift * 2) % 360}, 100%, 50%)`;
+
     const colorStops = [
-        { pos: 0, color: `hsl(${baseHue}, 100%, 60%)` },
-        { pos: 0.5, color: `hsl(${(baseHue + hueShift) % 360}, 100%, 55%)` },
-        { pos: 1, color: `hsl(${(baseHue + hueShift * 2) % 360}, 100%, 50%)` }
+        { pos: 0, color: cssColor1 },
+        { pos: 0.5, color: cssColor2 },
+        { pos: 1, color: cssColor3 }
     ];
     
     audioMotionInstance.registerGradient(gradientName, {
@@ -79,6 +83,11 @@ function generateDailyGradient(genre, audioMotionInstance) {
         dir: 'v',
         colorStops: colorStops
     });
+
+    // Applica il gradiente anche allo slider del volume
+    document.documentElement.style.setProperty('--vis-color-1', cssColor1);
+    document.documentElement.style.setProperty('--vis-color-2', cssColor2);
+    document.documentElement.style.setProperty('--vis-color-3', cssColor3);
     
     return gradientName;
 }
@@ -843,6 +852,7 @@ function setupPlayer(genreName) {
         volSlider.value = masterVolume;
         volSlider.oninput = (e) => {
             masterVolume = parseFloat(e.target.value);
+            localStorage.setItem('sfm_volume', masterVolume);
             applyVolumes();
         };
     }
@@ -855,13 +865,17 @@ function setupPlayer(genreName) {
         { mode: 0, radial: true, ledBars: false, lumiBars: false, outlineBars: true, fillAlpha: 0.1, barSpace: 0 }, // Riga circolare
         { mode: 6, radial: false, ledBars: false, lumiBars: true, outlineBars: false, fillAlpha: 1, barSpace: 2 }  // Lumi bars
     ];
-    let currentVisPreset = 0;
+    let currentVisPreset = parseInt(localStorage.getItem('sfm_vis_preset') ?? '0', 10);
+    if (currentVisPreset >= visualizerPresets.length) currentVisPreset = 0;
+    // Applica il preset salvato all'avvio
+    audioMotion.setOptions(visualizerPresets[currentVisPreset]);
 
     const visModeBtn = document.getElementById('vis-mode-btn');
     if (visModeBtn) {
         visModeBtn.onclick = () => {
             if (audioMotion) {
                 currentVisPreset = (currentVisPreset + 1) % visualizerPresets.length;
+                localStorage.setItem('sfm_vis_preset', currentVisPreset);
                 audioMotion.setOptions(visualizerPresets[currentVisPreset]);
             }
         };
